@@ -19,22 +19,34 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+class ScoreBlender(nn.Module):
+    def __init__(self, in_dim, loss_fn=""):
+        self.in_dim = in_dim
+        self.linear = nn.Linear(in_features=in_dim, out_features=1)
+        self.criterion = nn.MarginRankingLoss(10, reduction='sum')
+
+    def forward(self, pos_eval_and_scores, neg_eval_and_scores):
+        pos_out = self.linear(pos_eval_and_scores)
+        neg_out = self.linear(neg_eval_and_scores)
+        loss = self.criterion(pos_out.squeeze(), neg_out.view(len(pos_out), -1, ).mean(dim=1), torch.Tensor([1]))
+        return loss
+
+
 def train_linear_blender(in_dim, pos_eval_and_scores, neg_eval_and_scores, params, work_dir):
-    model = nn.Linear(in_features=in_dim, out_features=1)
-    criterion = nn.MarginRankingLoss(10, reduction='sum')
+    model = ScoreBlender(in_dim)
     # criterion = nn.CrossEntropyLoss(reduction='sum')
     optimizer = optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
     for e in range(params['epochs']):
-        pos_out = model(pos_eval_and_scores)
-        neg_out = model(neg_eval_and_scores)
-        loss = criterion(pos_out.squeeze(), neg_out.view(len(pos_out), -1, ).mean(dim=1), torch.Tensor([1]))
+        loss = model(pos_eval_and_scores, neg_eval_and_scores)
         print('Loss at epoch {} : {}'.format(e, loss))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
     torch.save(model, os.path.join(work_dir,
-                                   f'{"_".join(params["models"])}_{params["dataset"]}_ensemble.pth'))
+                                   'ensemble.pth'))
     return model
+
+
 
 
 def get_neg_scores_for_training(

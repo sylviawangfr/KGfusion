@@ -1,32 +1,16 @@
-from pykeen.constants import TARGET_TO_INDEX
 from pykeen.evaluation import RankBasedEvaluator
-from pykeen.evaluation.evaluator import optional_context_manager, Evaluator, _evaluate_batch
+from pykeen.evaluation.evaluator import optional_context_manager
 from pykeen.models import Model
-from pykeen.triples.triples_factory import MappedTriples
-from pykeen.triples.triples_factory import restrict_triples
-from pykeen.typing import LABEL_HEAD, LABEL_RELATION, LABEL_TAIL, InductiveMode, MappedTriples, Target
-from pykeen.triples.utils import get_entities, get_relations
+from pykeen.typing import LABEL_HEAD, LABEL_TAIL, InductiveMode, MappedTriples
 from pykeen.utils import (
-    format_relative_comparison,
-    is_cuda_oom_error,
-    is_cudnn_error,
-    is_nonzero_larger_than_maxint_error,
-    normalize_string,
-    prepare_filter_triples,
     split_list_in_batches_iter,
 )
-
 import logging
-import timeit
-from abc import ABC, abstractmethod
-from contextlib import contextmanager
-from math import ceil
-from typing import Any, ClassVar, Collection, Iterable, List, Mapping, Optional, Tuple, Type, Union, cast
-
+from typing import Iterable, Mapping, Optional, cast
 import numpy as np
-import pandas as pd
 import torch
 from tqdm.autonotebook import tqdm
+
 
 logger = logging.getLogger(__name__)
 
