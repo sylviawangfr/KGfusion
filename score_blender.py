@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.optim as optim
 from collections import Counter
 
+from tqdm import tqdm, trange
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -24,7 +25,9 @@ def train_linear_blender(in_dim, pos_eval_and_scores, neg_eval_and_scores, param
     criterion = nn.MarginRankingLoss(10, reduction='sum')
     # criterion = nn.CrossEntropyLoss(reduction='sum')
     optimizer = optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
-    for e in range(params['epochs']):
+    num_epochs = params['epochs']
+    training_iter = trange(1, num_epochs+1)
+    for e in training_iter:
         pos_out = model(pos_eval_and_scores)
         neg_out = model(neg_eval_and_scores)
         loss = criterion(pos_out.squeeze(), neg_out.view(len(pos_out), -1, ).mean(dim=1), torch.Tensor([1]))
@@ -32,8 +35,13 @@ def train_linear_blender(in_dim, pos_eval_and_scores, neg_eval_and_scores, param
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        training_iter.set_postfix(
+            {
+                "loss": loss
+            }
+        )
     torch.save(model, os.path.join(work_dir,
-                                   f'{"_".join(params["models"])}_{params["dataset"]}_ensemble.pth'))
+                                   f'{"_".join(params["models"])}_ensemble.pth'))
     return model
 
 
@@ -75,6 +83,7 @@ def get_rel_eval_scores(mapped_triples: MappedTriples, model_rel_eval, releval2i
     rel_h_t_eval = model_rel_eval[rel_idx.to_numpy().T]
     return rel_h_t_eval
 
+
 def generate_training_input_feature(mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg = 4):
     head_scores_neg = []
     tail_scores_neg = []
@@ -86,6 +95,7 @@ def generate_training_input_feature(mapped_triples: MappedTriples, context_resou
     tail_scores = []
     head_neg_index_topk = []
     tail_neg_index_topk = []
+    num_models = len(context_resource['models'])
     for m in context_resource['models']:
         m_context = context_resource[m]
         m_preds = m_context['eval']
@@ -124,14 +134,15 @@ def generate_training_input_feature(mapped_triples: MappedTriples, context_resou
     candidate_num = int(head_scores_neg.shape[0] / mapped_triples.shape[0])
     neg_h_signal = torch.zeros(mapped_triples.shape[0], 1).repeat((candidate_num, 1))
     neg_t_signal = torch.ones(mapped_triples.shape[0], 1).repeat((candidate_num, 1))
-    neg_h_eval = head_eval.repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], 2])
-    neg_t_eval = tail_eval.repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], 2])
+    neg_h_eval = head_eval.repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], num_models])
+    neg_t_eval = tail_eval.repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], num_models])
     h_neg_features = torch.concat([neg_h_signal, neg_h_eval, head_scores_neg], 1)
     t_neg_features = torch.concat([neg_t_signal, neg_t_eval, tail_scores_neg], 1)
     neg_feature = [h_neg_features.reshape([mapped_triples.shape[0], candidate_num, h_neg_features.shape[1]]),
                    t_neg_features.reshape([mapped_triples.shape[0], candidate_num, t_neg_features.shape[1]])]
     neg_feature = get_multi_model_neg_topk(neg_feature, [head_neg_index_topk, tail_neg_index_topk], num_neg)
     return pos_feature, neg_feature
+
 
 def get_multi_model_neg_topk(neg_feature_all, neg_index_topk, top_k):
     selected_feature = []
@@ -164,6 +175,7 @@ def generate_pred_input_feature(mapped_triples: MappedTriples, context_resource)
     tail_scores = []
     head_eval = []
     tail_eval = []
+    num_models = len(context_resource['models'])
     for m in context_resource['models']:
         m_context = context_resource[m]
         m_preds = m_context['preds']
@@ -178,8 +190,8 @@ def generate_pred_input_feature(mapped_triples: MappedTriples, context_resource)
     candidate_num = int(head_scores[0].shape[0] / mapped_triples.shape[0])
     h_signal = torch.zeros(mapped_triples.shape[0], 1).repeat(candidate_num, 1)
     t_signal = torch.ones(mapped_triples.shape[0], 1).repeat(candidate_num, 1)
-    head_eval = torch.hstack(head_eval).repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], 2])
-    tail_eval = torch.hstack(tail_eval).repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], 2])
+    head_eval = torch.hstack(head_eval).repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], num_models])
+    tail_eval = torch.hstack(tail_eval).repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], num_models])
     head_scores = torch.vstack(head_scores).T
     tail_scores = torch.vstack(tail_scores).T
     h_features = torch.concat([h_signal, head_eval, head_scores], 1)

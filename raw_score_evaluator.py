@@ -96,17 +96,19 @@ def per_rel_rank_evaluate(model: Model,
                           ordered_keys,
                           batch_size: Optional[int] = None,
                           slice_size: Optional[int] = None,
+                          **kwargs,
                           ):
     evaluator = RankBasedEvaluator()
     per_group_eval = dict()
     for key in ordered_keys:
         g = mapped_triples_groups.get_group(key)
         g_tensor = torch.from_numpy(g.values)
-        metrix_result_g = evaluator.evaluate(model, g_tensor, batch_size=batch_size, slice_size=slice_size)
+        metrix_result_g = evaluator.evaluate(model, g_tensor, batch_size=batch_size, slice_size=slice_size, **kwargs)
         per_group_eval.update({key: metrix_result_g})
     head_tail_mrr = []
     for key in ordered_keys:
         tmp_eval = per_group_eval[key].data
-        head_tail_mrr.append([tmp_eval[('harmonic_mean_rank','head','optimistic')], tmp_eval[('harmonic_mean_rank','tail','optimistic')]])
+        head_tail_mrr.append([tmp_eval[('harmonic_mean_rank', 'head', 'realistic')],
+                              tmp_eval[('harmonic_mean_rank', 'tail', 'realistic')]])
     head_tail_mrr = torch.Tensor(head_tail_mrr)
     return head_tail_mrr

@@ -31,12 +31,13 @@ def train_ComplEx(dataset):
             "num_epochs": 1000,
             "batch_size": 1024
         },
-        result_tracker='mlflow',
-        result_tracker_kwargs=dict(
-            tracking_uri='http://127.0.0.1:5000',
-            experiment_name='ComplEx training on FB237',
-        ),
-        stopper='early',
+        # result_tracker='mlflow',
+        # result_tracker_kwargs=dict(
+        #     tracking_uri='http://127.0.0.1:5000',
+        #     experiment_name='ComplEx training on FB237',
+        # ),
+        # stopper='early',
+        # stopper_kwargs={"patience": 10},
         evaluator_kwargs={"filtered": True}
     )
     return pipeline_result
@@ -69,13 +70,14 @@ def train_TuckER(dataset):
             "batch_size": 128,
             "label_smoothing": 0.1
         },
-        evaluator_kwargs={"filtered": True},
-        result_tracker='mlflow',
-        result_tracker_kwargs=dict(
-            tracking_uri='http://127.0.0.1:5000',
-            experiment_name='TuckER training on FB237',
-        ),
-        stopper='early',
+        # evaluator_kwargs={"filtered": True},
+        # result_tracker='mlflow',
+        # result_tracker_kwargs=dict(
+        #     tracking_uri='http://127.0.0.1:5000',
+        #     experiment_name='TuckER training on FB237',
+        # ),
+        # stopper='early',
+        # stopper_kwargs={"patience": 10}
     )
     return pipeline_result
 
@@ -112,7 +114,13 @@ def train_RotatE(dataset):
         evaluator_kwargs={
             "filtered": True
         },
-        stopper='early',
+        # stopper='early',
+        # stopper_kwargs={"patience": 10},
+        # result_tracker='mlflow',
+        # result_tracker_kwargs=dict(
+        #     tracking_uri='http://127.0.0.1:5000',
+        #     experiment_name='RotatE training on FB237',
+        # ),
     )
     return pipeline_result
 
