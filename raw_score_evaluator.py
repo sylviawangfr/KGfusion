@@ -108,7 +108,7 @@ def per_rel_rank_evaluate(model: Model,
     head_tail_mrr = []
     for key in ordered_keys:
         tmp_eval = per_group_eval[key].data
-        head_tail_mrr.append([tmp_eval[('harmonic_mean_rank', 'head', 'realistic')],
-                              tmp_eval[('harmonic_mean_rank', 'tail', 'realistic')]])
+        head_tail_mrr.append([tmp_eval[('adjusted_hits_at_k', 'head', 'realistic')],
+                              tmp_eval[('adjusted_hits_at_k', 'tail', 'realistic')]])
     head_tail_mrr = torch.Tensor(head_tail_mrr)
     return head_tail_mrr

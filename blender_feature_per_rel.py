@@ -1,17 +1,8 @@
-import logging
-import os
 from typing import Optional
 import pandas as pd
-from pykeen.evaluation import RankBasedEvaluator
-from pykeen.constants import TARGET_TO_INDEX
-from pykeen.evaluation.evaluator import Evaluator
 from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_dense_positive_mask_, filter_scores_
 from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL, Target
-from pykeen.utils import resolve_device
-from torch import Tensor, FloatTensor
 import torch
-import torch.nn as nn
-import torch.optim as optim
 from collections import Counter
 
 
@@ -46,10 +37,8 @@ def get_neg_scores_for_training(
 
 
 def get_rel_eval_scores(mapped_triples: MappedTriples, model_rel_eval, releval2idx: dict):
-    # triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
     rel_mapped = pd.DataFrame(data=mapped_triples.numpy()[:, 1], columns=['r'])
     rel_idx = rel_mapped.applymap(lambda x: releval2idx[x] if x in releval2idx else -1)
-    # num_triples = rel_mapped.shape[1]
     rel_h_t_eval = model_rel_eval[rel_idx.to_numpy().T]
     return rel_h_t_eval
 
@@ -110,7 +99,8 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, top_k, h_t_rel_eval:[
         target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
         topk_idx = neg_index[target].squeeze()
         # count top_k frequent index
-        topk_idx = topk_idx.transpose(0,1).reshape([199, 3*8])
+        backup_shape = topk_idx.shape
+        topk_idx = topk_idx.transpose(0,1).reshape([backup_shape[1], backup_shape[0]*backup_shape[2]])
         idx_df = pd.DataFrame(data=topk_idx.numpy().T)
         idx_df = idx_df.groupby(idx_df.columns, axis=1).apply(lambda x: x.values).apply(lambda y:y.flatten())
         idx_df = idx_df.apply(lambda x:x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(top_k)])

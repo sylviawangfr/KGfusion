@@ -6,7 +6,7 @@ from pykeen.evaluation import RankBasedEvaluator
 from pykeen.regularizers import LpRegularizer
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 
 def train_ComplEx(dataset):
