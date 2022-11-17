@@ -7,16 +7,18 @@ from pykeen.datasets import FB15k237, Nations
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.constants import TARGET_TO_INDEX
 from pykeen.evaluation.evaluator import Evaluator
-from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_dense_positive_mask_, filter_scores_
-from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL, Target, LABEL_HEAD, LABEL_TAIL
+from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_dense_positive_mask_
+from pykeen.typing import MappedTriples, Target, LABEL_HEAD, LABEL_TAIL
 from pykeen.utils import resolve_device
 from torch import Tensor, FloatTensor
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from tqdm import trange
 
-from blender_feature_per_rel import generate_pred_input_feature, generate_training_input_feature
-from context_load_and_run import load_score_context, per_rel_eval
+from feature_per_rel_dataloader import generate_training_input_feature
+from context_load_and_run import load_score_context
+from feature_per_rel_dataloader import PerRelDataset
 from main import get_all_pos_triples
 
 logging.basicConfig(level=logging.ERROR)
@@ -29,12 +31,13 @@ class ScoreBlenderLinear(nn.Module):
         self.in_dim = in_dim
         self.linear1 = nn.Linear(in_features=in_dim, out_features=in_dim * 2)
         self.linear2 = nn.Linear(in_features=in_dim * 2, out_features=1)
+        self.activate = nn.ReLU()
 
     def forward(self, in_features):
-        return self.linear2(self.linear1(in_features))
+        return self.linear2(self.activate(self.linear1(in_features)))
 
 
-def train_linear_blender(in_dim, pos_eval_and_scores, neg_eval_and_scores, params, work_dir):
+def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
     torch.manual_seed(42)
     model = ScoreBlenderLinear(in_dim)
     loss_func = nn.BCEWithLogitsLoss()
@@ -59,13 +62,50 @@ def train_linear_blender(in_dim, pos_eval_and_scores, neg_eval_and_scores, param
         loss.backward()
         optimizer.step()
         epochs.set_postfix_str({"loss: {}".format(loss)})
+    work_dir = para['work_dir']
     torch.save(model, os.path.join(work_dir,
                                    'BCE_ensemble.pth'))
     return model
 
 
+def train_linear_blender_Margin(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
+    torch.manual_seed(42)
+    model = ScoreBlenderLinear(in_dim)
+    loss_func = nn.MarginRankingLoss(margin=5)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
+    device: torch.device = resolve_device()
+    logger.info(f"Using device: {device}")
+    labels = torch.cat([torch.ones(pos_eval_and_scores.shape[0], 1), torch.zeros(neg_eval_and_scores.shape[0], 1)], 0)
+    if device is not None:
+        logger.info(f"Send to device: {device}")
+        model.to(device)
+        pos_features = pos_eval_and_scores.to(device)
+        neg_features = neg_eval_and_scores.to(device)
+    num_epochs = params['epochs']
+    epochs = trange(num_epochs)
+    for e in epochs:
+        pos = model(pos_features)
+        neg = model(neg_features)
+        loss = loss_func(pos.squeeze(), neg.view(len(pos), -1, ).mean(dim=1), torch.Tensor([1]).to(device))
+        logger.debug("loss: {}".format(loss))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        epochs.set_postfix_str({"loss: {}".format(loss)})
+    work_dir = para['work_dir']
+    torch.save(model, os.path.join(work_dir,
+                                   'margin_ensemble.pth'))
+    return model
+
+
+def get_train_loop(loss='bce'):
+    func_map = {"margin": train_linear_blender_Margin,
+                "bce": train_linear_blender_CE}
+    return func_map[loss]
+
+
 def aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all_pos_triples):
-    h_t_features = generate_pred_input_feature(mapped_triples, context_resource)
     # Send to device
     device: torch.device = resolve_device()
     logger.info(f"Using device: {device}")
@@ -74,11 +114,19 @@ def aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all
     # Ensure evaluation mode
     model.eval()
     # Send tensors to device
-    h_t_features = h_t_features.to(device=device)
-    ens_logits = model(h_t_features)
-    #  unwrap scores
-    ht_scores = torch.chunk(ens_logits.cpu(), 2, 0)
+    h_preds = []
+    t_preds = []
+    test_per_rel_dataset = PerRelDataset(mapped_triples, context_resource, all_pos_triples)
+    test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
+    for i, batch in enumerate(test_dataloader):
+        ens_logits = model(batch.to(device))
+        ht_preds = torch.chunk(ens_logits.cpu(), 2, 0)
+        h_preds.append(ht_preds[0])
+        t_preds.append(ht_preds[1])
     # restore format that required by pykeen evaluator
+    h_preds = torch.cat(h_preds, 0)
+    t_preds = torch.cat(t_preds, 0)
+    ht_scores = [h_preds, t_preds]
     evaluator = RankBasedEvaluator()
     relation_filter = None
     for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
@@ -168,12 +216,18 @@ def restore_eval_format(
     return relation_filter
 
 
-def test_blender_refactor(dataset, work_dir, para):
+def test_blender_refactor(dataset, para):
+    # 1. load individual model context
+    work_dir = para['work_dir']
     context = load_score_context(model_list, in_dir=work_dir)
+    # 2. generate training feature
     all_pos = get_all_pos_triples(dataset)
-    p, n = generate_training_input_feature(d.validation.mapped_triples, context, all_pos)
-    mo = train_linear_blender(p.shape[1], p, n, params=para, work_dir=work_dir)
-    re = aggregate_scores(mo, d.testing.mapped_triples, context, all_pos)
+    p, n = generate_training_input_feature(dataset.validation.mapped_triples, context, all_pos, num_neg=para['num_neg'])
+    # 3. train loop
+    train_loop = get_train_loop(para['loss'])
+    mo = train_loop(p.shape[1], p, n, params=para)
+    # 4. aggregate scores for testing
+    re = aggregate_scores(mo, dataset.testing.mapped_triples, context, all_pos)
     print(json.dumps(re.to_dict(), indent=2))
     json.dump(re.to_dict(), open(work_dir+"blended.json", "w"), indent=2)
 
@@ -181,13 +235,11 @@ def test_blender_refactor(dataset, work_dir, para):
 if __name__ == '__main__':
     model_list = ['ComplEx', 'TuckER', 'RotatE']
 
-    # para = dict(lr=0.01, weight_decay=5e-4, epochs=100, models=model_list)
-    # d = Nations()
-    # wdr = 'outputs/nations/'
+    para = dict(lr=0.1, epochs=5, models=model_list, num_neg=4, loss='margin', work_dir='outputs/nations/')
+    d = Nations()
 
-    para = dict(lr=0.01, epochs=500, models=model_list)
-    wdr = 'outputs/fb237/'
-    d = FB15k237()
+    # para = dict(lr=0.05, epochs=800, models=model_list, loss='margin', num_neg=16, work_dir='outputs/fb237/')
+    # d = FB15k237()
 
     # per_rel_eval(model_list, dataset=d, work_dir=wdr)
-    test_blender_refactor(d, work_dir=wdr, para=para)
+    test_blender_refactor(d, para=para)

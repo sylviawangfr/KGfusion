@@ -1,13 +1,61 @@
 from typing import Optional
 import pandas as pd
-from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_dense_positive_mask_, filter_scores_
-from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL, Target
+from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_scores_
+from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
 import torch
 from collections import Counter
+from torch.utils.data import Dataset
+
+
+class PerRelDataset(Dataset):
+    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
+        self.mapped_triples = mapped_triples
+        self.num_triples = mapped_triples.shape[0]
+        self.triple_index = list(range(mapped_triples.shape[0]))
+        self.context_resource = context_resource
+        self.all_pos_triples = all_pos_triples
+        self.num_neg = num_neg
+        self.train_pos = None
+        self.train_neg = None
+        self.test_examples = None
+
+    def __getitem__(self, index):
+        return self.triple_index[index]
+
+    def __len__(self):
+        return self.num_triples
+
+    def collate_train(self, batch):
+        if self.train_neg is None or self.train_pos is None:
+            self.train_pos, self.train_neg = generate_training_input_feature(self.mapped_triples,
+                                                                             self.context_resource,
+                                                                             self.all_pos_triples,
+                                                                             self.num_neg)
+            self.train_pos = torch.chunk(self.train_pos, self.num_triples, 0)
+            self.train_neg = torch.chunk(self.train_neg, self.num_triples, 0)
+        # fetch from pre-processed list
+        batch_tensors_pos = torch.vstack(self.train_pos[batch])
+        batch_tensors_neg = torch.vstack(self.train_neg[batch])
+        return batch_tensors_pos, batch_tensors_neg
+
+    def collate_test(self, batch):
+        if self.test_examples is None:
+            self.test_examples = generate_pred_input_feature(self.mapped_triples, self.context_resource)
+            self.test_examples = torch.chunk(self.test_examples, 2, 0)
+            self.test_examples = torch.cat(self.test_examples, 1)   # row: h + t
+            candidate_num = int(self.test_examples.shape[0] / self.num_triples)
+            self.test_examples = self.test_examples.reshape(self.num_triples, candidate_num, self.test_examples.shape[-1])
+        # fetch from pre-processed list: # row: h + t
+        ht_batch_tensors = self.test_examples[torch.as_tensor(batch)]
+        ht_batch_tensors = torch.chunk(ht_batch_tensors, 2, -1)
+        ht_batch_tensors = torch.cat(ht_batch_tensors, 0)
+        preserve_shape = ht_batch_tensors.shape
+        ht_batch_tensors = ht_batch_tensors.reshape(preserve_shape[0] * preserve_shape[1], preserve_shape[2])
+        return ht_batch_tensors
 
 
 def get_neg_scores_for_training(
-        triples: MappedTriples,
+        batch: MappedTriples,
         predictions,  # [head_pred, tail_pred]
         all_pos_triples: Optional[MappedTriples], top_k=4):
     # Create filter
@@ -17,7 +65,7 @@ def get_neg_scores_for_training(
     for index in range(2):
         # exclude positive triples
         positive_filter, _ = create_sparse_positive_filter_(
-            hrt_batch=triples,
+            hrt_batch=batch,
             all_pos_triples=all_pos_triples,
             relation_filter=None,
             filter_col=targets[index],
@@ -32,18 +80,17 @@ def get_neg_scores_for_training(
         indices_k[nan_index[:, 0], nan_index[:, 1]] = int(-1)
         neg_scores.append(scores)
         neg_index.append(indices_k)
-        # positive_mask = create_dense_positive_mask_(zero_tensor=torch.zeros_like(scores), filter_batch=positive_filter)
     return neg_scores, neg_index
 
 
-def get_rel_eval_scores(mapped_triples: MappedTriples, model_rel_eval, releval2idx: dict):
-    rel_mapped = pd.DataFrame(data=mapped_triples.numpy()[:, 1], columns=['r'])
+def get_rel_eval_scores(batch: MappedTriples, model_rel_eval, releval2idx: dict):
+    rel_mapped = pd.DataFrame(data=batch.numpy()[:, 1], columns=['r'])
     rel_idx = rel_mapped.applymap(lambda x: releval2idx[x] if x in releval2idx else -1)
     rel_h_t_eval = model_rel_eval[rel_idx.to_numpy().T]
     return rel_h_t_eval
 
 
-def generate_training_input_feature(mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg = 4):
+def generate_training_input_feature(batch: MappedTriples, context_resource, all_pos_triples, num_neg = 4):
     head_eval = []
     tail_eval = []
     scores_neg = []
@@ -56,7 +103,7 @@ def generate_training_input_feature(mapped_triples: MappedTriples, context_resou
         m_preds = m_context['eval']
         m_preds = torch.chunk(m_preds, 2, 1)
         m_ht_pos_scores = []
-        m_rel_h_t_eval = get_rel_eval_scores(mapped_triples, m_context['rel_eval'], context_resource['releval2idx'])
+        m_rel_h_t_eval = get_rel_eval_scores(batch, m_context['rel_eval'], context_resource['releval2idx'])
         m_h_eval, m_t_eval = torch.chunk(m_rel_h_t_eval, 2, 1)
         head_eval.append(m_h_eval)
         tail_eval.append(m_t_eval)
@@ -64,13 +111,13 @@ def generate_training_input_feature(mapped_triples: MappedTriples, context_resou
         # get pos scores
         for idx, target in enumerate(targets):
             m_pos_scores_target = m_preds[idx]
-            m_pos_scores_target = m_pos_scores_target[torch.arange(0, mapped_triples.shape[0]), mapped_triples[:, targets[idx]]]
+            m_pos_scores_target = m_pos_scores_target[torch.arange(0, batch.shape[0]), batch[:, targets[idx]]]
             m_ht_pos_scores.append(m_pos_scores_target)  # [[h1,h2...],[t1,t2...]]
 
         m_ht_pos_scores = torch.vstack(m_ht_pos_scores).T
         scores_pos.append(m_ht_pos_scores.flatten())  # [h1,t1,h2,t2...]
         # tri get neg scores
-        m_neg_scores, m_neg_index_topk2 = get_neg_scores_for_training(mapped_triples, m_preds, all_pos_triples, num_neg)
+        m_neg_scores, m_neg_index_topk2 = get_neg_scores_for_training(batch, m_preds, all_pos_triples, num_neg)
         scores_neg.append(torch.stack(m_neg_scores, 1))  # [h,t]
         neg_index_topk_double.append(torch.stack(m_neg_index_topk2, 1))
     print("test")
@@ -80,7 +127,7 @@ def generate_training_input_feature(mapped_triples: MappedTriples, context_resou
     head_eval = torch.hstack(head_eval)
     tail_eval = torch.hstack(tail_eval)
     # # pos feature
-    zero_one_signal = torch.as_tensor([0, 1]).repeat(mapped_triples.shape[0]).unsqueeze(dim=1)  # [0,1,0,1....]
+    zero_one_signal = torch.as_tensor([2, 1]).repeat(batch.shape[0]).unsqueeze(dim=1)  # [0,1,0,1....]
     pos_features = torch.concat([zero_one_signal, rel_eval, scores_pos], 1)
     # neg feature
     neg_features = get_multi_model_neg_topk(scores_neg, neg_index_topk_double, num_neg, [head_eval, tail_eval])
@@ -120,7 +167,7 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, top_k, h_t_rel_eval:[
     # selected_feature = torch.vstack(selected_feature)
     scores_repeat = torch.cat(selected_scores, 1)
     eval_repeat = torch.cat(eval_features, 1)
-    signal_repeat = torch.cat([torch.zeros(eval_repeat.shape[0], top_k, 1), torch.ones(eval_repeat.shape[0], top_k, 1)], 1)
+    signal_repeat = torch.cat([torch.full((eval_repeat.shape[0], top_k, 1), 2), torch.ones(eval_repeat.shape[0], top_k, 1)], 1)
     selected_feature = torch.cat([signal_repeat, eval_repeat, scores_repeat], 2)
     selected_feature = selected_feature.reshape(selected_feature.shape[0] * selected_feature.shape[1], selected_feature.shape[2])
     selected_feature = torch.nan_to_num(selected_feature, -999.)
@@ -128,6 +175,7 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, top_k, h_t_rel_eval:[
 
 
 def generate_pred_input_feature(mapped_triples: MappedTriples, context_resource):
+    # h1 * candi + t2 * candi + h2 * candi + t2 * candi
     head_scores = []
     tail_scores = []
     head_eval = []
@@ -145,7 +193,7 @@ def generate_pred_input_feature(mapped_triples: MappedTriples, context_resource)
         tail_eval.append(m_t_eval)
 
     candidate_num = int(head_scores[0].shape[0] / mapped_triples.shape[0])
-    h_signal = torch.zeros(mapped_triples.shape[0], 1).repeat(candidate_num, 1)
+    h_signal = torch.full((mapped_triples.shape[0], 1), 2).repeat(candidate_num, 1)
     t_signal = torch.ones(mapped_triples.shape[0], 1).repeat(candidate_num, 1)
     head_eval = torch.hstack(head_eval).repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], num_models])
     tail_eval = torch.hstack(tail_eval).repeat((1, candidate_num)).reshape([candidate_num * mapped_triples.shape[0], num_models])
