@@ -25,7 +25,18 @@ logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
-class ScoreBlenderLinear(nn.Module):
+class ScoreBlenderLinear1(nn.Module):
+    def __init__(self, in_dim):
+        super().__init__()
+        self.in_dim = in_dim
+        self.linear1 = nn.Linear(in_features=in_dim, out_features=in_dim * 2)
+        self.linear2 = nn.Linear(in_features=in_dim * 2, out_features=1)
+
+    def forward(self, in_features):
+        return self.linear2(self.linear1(in_features))
+
+
+class ScoreBlenderLinear2(nn.Module):
     def __init__(self, in_dim):
         super().__init__()
         self.in_dim = in_dim
@@ -39,10 +50,10 @@ class ScoreBlenderLinear(nn.Module):
 
 def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
     torch.manual_seed(42)
-    model = ScoreBlenderLinear(in_dim)
+    model = ScoreBlenderLinear2(in_dim)
     loss_func = nn.BCEWithLogitsLoss()
-    # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
+    optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
+    # optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
     device: torch.device = resolve_device()
     logger.info(f"Using device: {device}")
     features = torch.cat([pos_eval_and_scores, neg_eval_and_scores], 0)
@@ -70,13 +81,12 @@ def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, pa
 
 def train_linear_blender_Margin(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
     torch.manual_seed(42)
-    model = ScoreBlenderLinear(in_dim)
+    model = ScoreBlenderLinear1(in_dim)
     loss_func = nn.MarginRankingLoss(margin=5)
     # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
     optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
     device: torch.device = resolve_device()
     logger.info(f"Using device: {device}")
-    labels = torch.cat([torch.ones(pos_eval_and_scores.shape[0], 1), torch.zeros(neg_eval_and_scores.shape[0], 1)], 0)
     if device is not None:
         logger.info(f"Send to device: {device}")
         model.to(device)
@@ -235,11 +245,11 @@ def test_blender_refactor(dataset, para):
 if __name__ == '__main__':
     model_list = ['ComplEx', 'TuckER', 'RotatE']
 
-    para = dict(lr=0.1, epochs=5, models=model_list, num_neg=4, loss='margin', work_dir='outputs/nations/')
-    d = Nations()
+    # para = dict(lr=0.1, epochs=5, models=model_list, num_neg=4, loss='margin', work_dir='outputs/nations/')
+    # d = Nations()
 
-    # para = dict(lr=0.05, epochs=800, models=model_list, loss='margin', num_neg=16, work_dir='outputs/fb237/')
-    # d = FB15k237()
+    para = dict(lr=0.05, epochs=1000, models=model_list, loss='margin', num_neg=16, work_dir='outputs/fb237/')
+    d = FB15k237()
 
     # per_rel_eval(model_list, dataset=d, work_dir=wdr)
     test_blender_refactor(d, para=para)
