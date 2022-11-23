@@ -16,16 +16,17 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import trange
 
-from feature_per_rel_dataloader import generate_training_input_feature
 from context_load_and_run import load_score_context
-from feature_per_rel_dataloader import PerRelDataset
+from feature_per_rel_ht1_dataloader import PerRelSignalDataset
+from feature_per_rel_ht2_dataloader import PerRelNoSignalDataset
+from feature_scores_only_dataloader import ScoresOnlyDataset
 from main import get_all_pos_triples
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 
-class ScoreBlenderLinear1(nn.Module):
+class ScoreBlenderLinear(nn.Module):
     def __init__(self, in_dim):
         super().__init__()
         self.in_dim = in_dim
@@ -36,24 +37,12 @@ class ScoreBlenderLinear1(nn.Module):
         return self.linear2(self.linear1(in_features))
 
 
-class ScoreBlenderLinear2(nn.Module):
-    def __init__(self, in_dim):
-        super().__init__()
-        self.in_dim = in_dim
-        self.linear1 = nn.Linear(in_features=in_dim, out_features=in_dim * 2)
-        self.linear2 = nn.Linear(in_features=in_dim * 2, out_features=1)
-        self.activate = nn.ReLU()
-
-    def forward(self, in_features):
-        return self.linear2(self.activate(self.linear1(in_features)))
-
-
 def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
     torch.manual_seed(42)
-    model = ScoreBlenderLinear2(in_dim)
+    model = ScoreBlenderLinear(in_dim)
     loss_func = nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
-    # optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
+    # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
     device: torch.device = resolve_device()
     logger.info(f"Using device: {device}")
     features = torch.cat([pos_eval_and_scores, neg_eval_and_scores], 0)
@@ -81,7 +70,7 @@ def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, pa
 
 def train_linear_blender_Margin(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
     torch.manual_seed(42)
-    model = ScoreBlenderLinear1(in_dim)
+    model = ScoreBlenderLinear(in_dim)
     loss_func = nn.MarginRankingLoss(margin=5)
     # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
     optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
@@ -115,7 +104,25 @@ def get_train_loop(loss='bce'):
     return func_map[loss]
 
 
-def aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all_pos_triples):
+def get_dataloader(keyword='2'):
+    clz = {"1": PerRelSignalDataset,
+           "2": PerRelNoSignalDataset,
+           "3": ScoresOnlyDataset}
+    return clz[keyword]
+
+
+def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
+    dataloader_cls = get_dataloader(para['dataloader'])
+    train_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples,
+                                                  num_neg=para['num_neg'])
+    p, n = train_per_rel_dataset.generate_training_input_feature()
+    # 3. train loop
+    train_loop = get_train_loop(para['loss'])
+    mo = train_loop(p.shape[1], p, n, params=para)
+    return mo
+
+
+def aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
     # Send to device
     device: torch.device = resolve_device()
     logger.info(f"Using device: {device}")
@@ -126,7 +133,8 @@ def aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all
     # Send tensors to device
     h_preds = []
     t_preds = []
-    test_per_rel_dataset = PerRelDataset(mapped_triples, context_resource, all_pos_triples)
+    dataloader_cls = get_dataloader(para['dataloader'])
+    test_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples)
     test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
     for i, batch in enumerate(test_dataloader):
         ens_logits = model(batch.to(device))
@@ -226,30 +234,28 @@ def restore_eval_format(
     return relation_filter
 
 
-def test_blender_refactor(dataset, para):
+def pipeline_aggregation(dataset, para):
     # 1. load individual model context
     work_dir = para['work_dir']
     context = load_score_context(model_list, in_dir=work_dir)
-    # 2. generate training feature
+    # 2. train model
     all_pos = get_all_pos_triples(dataset)
-    p, n = generate_training_input_feature(dataset.validation.mapped_triples, context, all_pos, num_neg=para['num_neg'])
-    # 3. train loop
-    train_loop = get_train_loop(para['loss'])
-    mo = train_loop(p.shape[1], p, n, params=para)
-    # 4. aggregate scores for testing
-    re = aggregate_scores(mo, dataset.testing.mapped_triples, context, all_pos)
+    mo = train_aggregation_model(dataset.validation.mapped_triples, context, all_pos, para)
+    # 3. aggregate scores for testing
+    re = aggregate_scores(mo, dataset.testing.mapped_triples, context, all_pos, para)
     print(json.dumps(re.to_dict(), indent=2))
-    json.dump(re.to_dict(), open(work_dir+"blended.json", "w"), indent=2)
+    json.dump(re.to_dict(), open(work_dir + "blended.json", "w"), indent=2)
 
 
 if __name__ == '__main__':
     model_list = ['ComplEx', 'TuckER', 'RotatE']
 
-    # para = dict(lr=0.1, epochs=5, models=model_list, num_neg=4, loss='margin', work_dir='outputs/nations/')
-    # d = Nations()
+    para = dict(lr=0.1, epochs=5, models=model_list, num_neg=4, loss='margin', dataloader='2',
+                work_dir='outputs/nations/')
+    d = Nations()
 
-    para = dict(lr=0.05, epochs=1000, models=model_list, loss='margin', num_neg=16, work_dir='outputs/fb237/')
-    d = FB15k237()
+    # para = dict(lr=0.05, epochs=1000, models=model_list, loss='bce', num_neg=16, work_dir='outputs/fb237/')
+    # d = FB15k237()
 
-    # per_rel_eval(model_list, dataset=d, work_dir=wdr)
-    test_blender_refactor(d, para=para)
+    # per_rel_eval(model_list, dataset=d, work_dir=para['work_dir'])
+    pipeline_aggregation(d, para=para)
