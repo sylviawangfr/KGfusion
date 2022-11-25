@@ -11,6 +11,7 @@ class ScoresOnlyDataset(FusionDataset):
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
     def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
+        self.dim = len(context_resource['models'])
 
     def _get_neg_scores_for_training(self, dev_predictions, times=4):
         # Create filter

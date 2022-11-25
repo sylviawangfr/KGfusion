@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from mlflow import log_metric, log_param
 import mlflow.pytorch
-from context_load_and_run import load_score_context, per_rel_eval
+from context_load_and_run import load_score_context
 from feature_per_rel_ht1_dataset import PerRelSignalDataset
 from feature_per_rel_ht2_dataset import PerRelNoSignalDataset
 from feature_scores_only_dataset import ScoresOnlyDataset
@@ -38,76 +38,52 @@ class ScoreBlenderLinear(nn.Module):
         return self.linear2(self.linear1(in_features))
 
 
-def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
-    torch.manual_seed(42)
-    model = ScoreBlenderLinear(in_dim)
+def train_step_linear_blender_CE(model, dataloader:DataLoader, device, params):
     loss_func = nn.BCEWithLogitsLoss()
     # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
     optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
-    device: torch.device = resolve_device()
-    logger.info(f"Using device: {device}")
-    features = torch.cat([pos_eval_and_scores, neg_eval_and_scores], 0)
-    labels = torch.cat([torch.ones(pos_eval_and_scores.shape[0], 1), torch.zeros(neg_eval_and_scores.shape[0], 1)], 0)
-    if device is not None:
-        logger.info(f"Send to device: {device}")
-        model.to(device)
+    train_loss = 0
+    for batch, (pos_feature, neg_feature) in enumerate(dataloader):
+        features = torch.cat([pos_feature, neg_feature], 0)
+        labels = torch.cat([torch.ones(pos_feature.shape[0], 1), torch.zeros(neg_feature.shape[0], 1)], 0)
         features = features.to(device)
         labels = labels.to(device)
-    num_epochs = params['epochs']
-    epochs = trange(num_epochs)
-    for e in epochs:
         y_logits = model(features)
         loss = loss_func(y_logits, labels)
-        # logger.debug("loss: {}".format(loss))
+        train_loss += loss.item()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        epochs.set_postfix_str({"loss: {}".format(loss)})
-    work_dir = para['work_dir']
-    torch.save(model, os.path.join(work_dir,
-                                   'BCE_ensemble.pth'))
-    return model
+    train_loss = train_loss / len(dataloader)
+    return train_loss
 
 
-def train_linear_blender_Margin(in_dim, pos_eval_and_scores, neg_eval_and_scores, params):
-    torch.manual_seed(42)
-    model = ScoreBlenderLinear(in_dim)
+def train_step_linear_blender_Margin(model, dataloader:DataLoader, device, params):
     loss_func = nn.MarginRankingLoss(margin=5)
     # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
     optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
-    device: torch.device = resolve_device()
-    logger.info(f"Using device: {device}")
-    if device is not None:
-        logger.info(f"Send to device: {device}")
-        model.to(device)
-        pos_features = pos_eval_and_scores.to(device)
-        neg_features = neg_eval_and_scores.to(device)
-    num_epochs = params['epochs']
-    epochs = trange(num_epochs)
-    for e in epochs:
-        pos = model(pos_features)
-        neg = model(neg_features)
+    train_loss = 0
+    for batch, (pos_feature, neg_feature) in enumerate(dataloader):
+        pos_feature = pos_feature.to(device)
+        neg_feature = neg_feature.to(device)
+        pos = model(pos_feature)
+        neg = model(neg_feature)
         loss = loss_func(pos.squeeze(), neg.view(len(pos), -1, ).mean(dim=1), torch.Tensor([1]).to(device))
-        logger.debug("loss: {}".format(loss))
+        train_loss += loss.item()
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        epochs.set_postfix_str({"loss: {}".format(loss)})
-        if params['mlflow']:
-            mlflow.log_metric("train_loss", loss.data.cpu(), step=e)
-    work_dir = para['work_dir']
-    torch.save(model, os.path.join(work_dir,
-                                   'margin_ensemble.pth'))
-    return model
+    train_loss = train_loss / len(dataloader)
+    return train_loss
 
 
 def get_train_loop(loss='bce'):
-    func_map = {"margin": train_linear_blender_Margin,
-                "bce": train_linear_blender_CE}
+    func_map = {"margin": train_step_linear_blender_Margin,
+                "bce": train_step_linear_blender_CE}
     return func_map[loss]
 
 
-def get_dataloader(keyword='2'):
+def get_nn_dataset(keyword='2'):
     clz = {"1": PerRelSignalDataset,
            "2": PerRelNoSignalDataset,
            "3": ScoresOnlyDataset}
@@ -115,14 +91,29 @@ def get_dataloader(keyword='2'):
 
 
 def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
-    dataloader_cls = get_dataloader(para['dataloader'])
-    train_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples,
+    dataset_cls = get_nn_dataset(para['dataloader'])
+    train_data = dataset_cls(mapped_triples, context_resource, all_pos_triples,
                                                   num_neg=para['num_neg'])
-    p, n = train_per_rel_dataset.generate_training_input_feature()
-    # 3. train loop
+    train_dataloader = DataLoader(train_data, batch_size=para['batch_size'], shuffle=True, collate_fn=train_data.collate_train)
     train_loop = get_train_loop(para['loss'])
-    mo = train_loop(p.shape[1], p, n, params=para)
-    return mo
+    num_epochs = para['epochs']
+    epochs = trange(num_epochs)
+    model = ScoreBlenderLinear(train_data.dim)
+    device: torch.device = resolve_device()
+    logger.info(f"Using device: {device}")
+    if device is not None:
+        logger.info(f"Send to device: {device}")
+        model.to(device)
+    for e in epochs:
+        train_loss = train_loop(model, train_dataloader, device, para)
+        logger.debug("loss: {}".format(train_loss))
+        epochs.set_postfix_str({"loss: {}".format(train_loss)})
+        if para['mlflow']:
+            mlflow.log_metric("train_loss", train_loss, step=e)
+    work_dir = para['work_dir']
+    torch.save(model, os.path.join(work_dir,
+                                   'margin_ensemble.pth'))
+    return model
 
 
 def aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
@@ -136,7 +127,7 @@ def aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all
     # Send tensors to device
     h_preds = []
     t_preds = []
-    dataloader_cls = get_dataloader(para['dataloader'])
+    dataloader_cls = get_nn_dataset(para['dataloader'])
     test_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples)
     test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
     for i, batch in enumerate(test_dataloader):
@@ -256,17 +247,17 @@ def pipeline_aggregation(dataset, para):
 if __name__ == '__main__':
     model_list = ['ComplEx', 'TuckER', 'RotatE']
 
-    # para = dict(lr=0.1, epochs=5,
-    #             models=model_list, num_neg=4,
-    #             loss='margin', dataloader='3',
-    #             work_dir='outputs/nations/', mlflow=True)
-    # d = Nations()
+    para = dict(lr=0.1, epochs=5,
+                models=model_list, num_neg=4, batch_size=64,
+                loss='margin', dataloader='3',
+                work_dir='outputs/nations/', mlflow=True)
+    d = Nations()
 
-    para = dict(lr=0.1, epochs=1000,
-                models=model_list, loss='margin',
-                num_neg=16, dataloader='2',
-                work_dir='outputs/fb237/', mlflow=True)
-    d = FB15k237()
+    # para = dict(lr=0.01, epochs=1000,
+    #             models=model_list, loss='margin', batch_size=1024,
+    #             num_neg=16, dataloader='2',
+    #             work_dir='outputs/fb237/', mlflow=True)
+    # d = FB15k237()
 
-    per_rel_eval(model_list, dataset=d, work_dir=para['work_dir'])
+    # per_rel_eval(model_list, dataset=d, work_dir=para['work_dir'])
     pipeline_aggregation(d, para=para)

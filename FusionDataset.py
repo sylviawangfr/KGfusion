@@ -26,11 +26,13 @@ class FusionDataset(Dataset, ABC):
     def collate_train(self, batch):
         if self.train_neg is None or self.train_pos is None:
             self.train_pos, self.train_neg = self.generate_training_input_feature()
-            self.train_pos = torch.chunk(self.train_pos, self.num_triples, 0)
-            self.train_neg = torch.chunk(self.train_neg, self.num_triples, 0)
+            self.train_pos = self.train_pos.reshape(self.num_triples, int(self.train_pos.shape[0] / self.num_triples), self.train_pos.shape[-1])
+            self.train_neg = self.train_neg.reshape(self.num_triples, int(self.train_neg.shape[0] / self.num_triples), self.train_neg.shape[-1])
         # fetch from pre-processed list
-        batch_tensors_pos = torch.vstack(self.train_pos[batch])
-        batch_tensors_neg = torch.vstack(self.train_neg[batch])
+        batch_tensors_pos = self.train_pos[torch.as_tensor(batch)]
+        batch_tensors_pos = batch_tensors_pos.reshape(batch_tensors_pos.shape[0] * batch_tensors_pos.shape[1], batch_tensors_pos.shape[2])
+        batch_tensors_neg = self.train_neg[torch.as_tensor(batch)]
+        batch_tensors_neg = batch_tensors_neg.reshape(batch_tensors_neg.shape[0] * batch_tensors_neg.shape[1], batch_tensors_neg.shape[2])
         return batch_tensors_pos, batch_tensors_neg
 
     def collate_test(self, batch):

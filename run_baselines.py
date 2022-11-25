@@ -9,7 +9,7 @@ import logging
 # logging.basicConfig(level=logging.DEBUG)
 
 
-def train_ComplEx(dataset):
+def train_ComplEx2(dataset):
     pipeline_result = pipeline(
         dataset=dataset,
         model="ComplEx",
@@ -18,7 +18,7 @@ def train_ComplEx(dataset):
         loss=CrossEntropyLoss,
         loss_kwargs={"reduction": "mean"},
         regularizer=LpRegularizer,
-        regularizer_kwargs=dict(weight=5e-2, p=3.0, ),
+        regularizer_kwargs=dict(weight=5e-2, p=2.0, ),
         # lr_scheduler='ExponentialLR',
         # lr_scheduler_kwargs=dict(gamma=0.99, ),
         optimizer="adagrad",
@@ -42,6 +42,39 @@ def train_ComplEx(dataset):
     )
     return pipeline_result
 
+
+def train_ComplEx(dataset):
+    pipeline_result = pipeline(
+        dataset=dataset,
+        model="ComplEx",
+        model_kwargs=dict(embedding_dim=200, entity_initializer="xavier_uniform",
+                          relation_initializer="xavier_uniform"),
+        loss=CrossEntropyLoss,
+        loss_kwargs={"reduction": "mean"},
+        regularizer=LpRegularizer,
+        regularizer_kwargs=dict(weight=0.01, p=2.0, ),
+        # lr_scheduler='ExponentialLR',
+        # lr_scheduler_kwargs=dict(gamma=0.99, ),
+        optimizer="adagrad",
+        optimizer_kwargs=dict(lr=0.5),
+        evaluator=RankBasedEvaluator,
+        training_loop="SLCWA",
+        negative_sampler="basic",
+        negative_sampler_kwargs={"num_negs_per_pos": 10},
+        training_kwargs={
+            "num_epochs": 1000,
+            "batch_size": 1024
+        },
+        # result_tracker='mlflow',
+        # result_tracker_kwargs=dict(
+        #     tracking_uri='http://127.0.0.1:5000',
+        #     experiment_name='ComplEx training on FB237',
+        # ),
+        # stopper='early',
+        # stopper_kwargs={"patience": 10},
+        evaluator_kwargs={"filtered": True}
+    )
+    return pipeline_result
 
 def train_TuckER(dataset):
     pipeline_result = pipeline(
