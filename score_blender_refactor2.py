@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from typing import Optional
-import pandas as pd
+import gc
 from pykeen.datasets import FB15k237, Nations
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.constants import TARGET_TO_INDEX
@@ -62,6 +62,7 @@ def train_step_linear_blender_Margin(model, dataloader:DataLoader, device, param
     loss_func = nn.MarginRankingLoss(margin=5)
     # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
     optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'])
+    optimizer.zero_grad()
     train_loss = 0
     for batch, (pos_feature, neg_feature) in enumerate(dataloader):
         pos_feature = pos_feature.to(device)
@@ -73,6 +74,11 @@ def train_step_linear_blender_Margin(model, dataloader:DataLoader, device, param
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+    del pos_feature
+    del neg_feature
+    gc.collect()
+    optimizer.zero_grad()
+    torch.cuda.empty_cache()
     train_loss = train_loss / len(dataloader)
     return train_loss
 

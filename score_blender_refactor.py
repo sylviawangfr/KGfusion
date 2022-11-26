@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from typing import Optional
-import pandas as pd
+import gc
 from pykeen.datasets import FB15k237, Nations
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.constants import TARGET_TO_INDEX
@@ -63,6 +63,11 @@ def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, pa
         loss.backward()
         optimizer.step()
         epochs.set_postfix_str({"loss: {}".format(loss)})
+    del features
+    del labels
+    gc.collect()
+    optimizer.zero_grad()
+    torch.cuda.empty_cache()
     work_dir = para['work_dir']
     torch.save(model, os.path.join(work_dir,
                                    'BCE_ensemble.pth'))
@@ -264,7 +269,7 @@ if __name__ == '__main__':
 
     para = dict(lr=0.1, epochs=1000,
                 models=model_list, loss='margin',
-                num_neg=16, dataloader='2',
+                num_neg=16, dataloader='3',
                 work_dir='outputs/fb237/', mlflow=True)
     d = FB15k237()
 

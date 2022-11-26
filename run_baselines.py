@@ -166,5 +166,5 @@ def train_multi_models(dataset, work_dir):
 
 
 if __name__ == '__main__':
-    # train_multi_models(dataset=ds.Nations(), work_dir="outputs/nations/")
-    train_multi_models(dataset=ds.FB15k237(), work_dir="outputs/fb237/")
+    train_multi_models(dataset=ds.Nations(), work_dir="outputs/nations/")
+    # train_multi_models(dataset=ds.FB15k237(), work_dir="outputs/fb237/")
