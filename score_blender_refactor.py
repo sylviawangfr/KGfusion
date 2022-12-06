@@ -3,24 +3,24 @@ import logging
 import os
 from typing import Optional
 import gc
-from pykeen.datasets import FB15k237, Nations
+from pykeen.datasets import Nations
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.constants import TARGET_TO_INDEX
 from pykeen.evaluation.evaluator import Evaluator
 from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_dense_positive_mask_
 from pykeen.typing import MappedTriples, Target, LABEL_HEAD, LABEL_TAIL
 from pykeen.utils import resolve_device
-from torch import Tensor, FloatTensor
+from torch import FloatTensor
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import trange
-from mlflow import log_metric, log_param
+from mlflow import log_param
 import mlflow.pytorch
-from context_load_and_run import load_score_context, per_rel_eval
-from feature_per_rel_ht1_dataset import PerRelSignalDataset
-from feature_per_rel_ht2_dataset import PerRelNoSignalDataset
-from feature_scores_only_dataset import ScoresOnlyDataset
+from context_load_and_run import load_score_context
+from features.feature_per_rel_ht1_dataset import PerRelSignalDataset
+from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
+from features.feature_scores_only_dataset import ScoresOnlyDataset
 from main import get_all_pos_triples
 
 logging.basicConfig(level=logging.ERROR)
@@ -63,6 +63,7 @@ def train_linear_blender_CE(in_dim, pos_eval_and_scores, neg_eval_and_scores, pa
         loss.backward()
         optimizer.step()
         epochs.set_postfix_str({"loss: {}".format(loss)})
+        del y_logits
     del features
     del labels
     gc.collect()
@@ -85,21 +86,29 @@ def train_linear_blender_Margin(in_dim, pos_eval_and_scores, neg_eval_and_scores
     if device is not None:
         logger.info(f"Send to device: {device}")
         model.to(device)
-        pos_features = pos_eval_and_scores.to(device)
-        neg_features = neg_eval_and_scores.to(device)
+        pos_eval_and_scores = pos_eval_and_scores.to(device)
+        neg_eval_and_scores = neg_eval_and_scores.to(device)
     num_epochs = params['epochs']
     epochs = trange(num_epochs)
+    model.train()
     for e in epochs:
-        pos = model(pos_features)
-        neg = model(neg_features)
+        pos = model(pos_eval_and_scores)
+        neg = model(neg_eval_and_scores)
         loss = loss_func(pos.squeeze(), neg.view(len(pos), -1, ).mean(dim=1), torch.Tensor([1]).to(device))
-        logger.debug("loss: {}".format(loss))
+        logger.info("loss: {}".format(loss))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         epochs.set_postfix_str({"loss: {}".format(loss)})
         if params['mlflow']:
             mlflow.log_metric("train_loss", loss.data.cpu(), step=e)
+        del pos
+        del neg
+    optimizer.zero_grad()
+    del pos_eval_and_scores
+    del neg_eval_and_scores
+    gc.collect()
+    torch.cuda.empty_cache()
     work_dir = para['work_dir']
     torch.save(model, os.path.join(work_dir,
                                    'margin_ensemble.pth'))
@@ -265,13 +274,21 @@ if __name__ == '__main__':
     #             models=model_list, num_neg=4,
     #             loss='margin', dataloader='3',
     #             work_dir='outputs/nations/', mlflow=True)
-    # d = Nations()
+    para = dict(lr=0.001, epochs=50,
+                models=model_list, num_neg=4,
+                loss='bce', dataloader='3',
+                work_dir='outputs/nations/', mlflow=True)
+    d = Nations()
 
-    para = dict(lr=0.1, epochs=1000,
-                models=model_list, loss='margin',
-                num_neg=16, dataloader='3',
-                work_dir='outputs/fb237/', mlflow=True)
-    d = FB15k237()
+    # para = dict(lr=0.1, epochs=1000,
+    #             models=model_list, loss='margin',
+    #             num_neg=16, dataloader='3',
+    #             work_dir='outputs/fb237/', mlflow=True)
+    # para = dict(lr=0.1, epochs=1000,
+    #             models=model_list, loss='margin',
+    #             num_neg=8, dataloader='3',
+    #             work_dir='outputs/fb237/', mlflow=True)
+    # d = FB15k237()
 
-    per_rel_eval(model_list, dataset=d, work_dir=para['work_dir'])
+    # per_rel_eval(model_list, dataset=d, work_dir=para['work_dir'])
     pipeline_aggregation(d, para=para)

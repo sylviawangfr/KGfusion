@@ -3,7 +3,7 @@ from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_s
 from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
 import torch
 from collections import Counter
-from FusionDataset import FusionDataset
+from FusionDataset import FusionDataset, padding_sampling
 
 
 class PerRelSignalDataset(FusionDataset):
@@ -105,15 +105,9 @@ class PerRelSignalDataset(FusionDataset):
             idx_df = pd.DataFrame(data=topk_idx.numpy().T)
             idx_df = idx_df.groupby(idx_df.columns, axis=1).apply(lambda x: x.values).apply(lambda y:y.flatten())
             idx_df = idx_df.apply(lambda x:x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(self.num_neg)])
+            idx_df = idx_df.apply(lambda x: padding_sampling(x, self.num_neg))
             tmp_topk_idx = list(idx_df.values)
-            fill_topk = []
-            for i in tmp_topk_idx:
-                if len(i) == self.num_neg:
-                    fill_topk.append(i)
-                else:
-                    i.extend(list(range(self.num_neg - len(i))))
-                    fill_topk.append(i)
-            fill_topk = torch.as_tensor(fill_topk)
+            fill_topk = torch.as_tensor(tmp_topk_idx)
             target_neg_scores = target_neg_scores[torch.arange(0, target_neg_scores.shape[0]).unsqueeze(1), fill_topk]
             selected_scores.append(target_neg_scores)
             target_eval = torch.reshape(h_t_rel_eval[target].repeat(1,self.num_neg), (h_t_rel_eval[target].shape[0], self.num_neg, num_models))
@@ -124,7 +118,6 @@ class PerRelSignalDataset(FusionDataset):
         signal_repeat = torch.cat([torch.full((eval_repeat.shape[0], self.num_neg, 1), 2), torch.ones(eval_repeat.shape[0], self.num_neg, 1)], 1)
         selected_feature = torch.cat([signal_repeat, eval_repeat, scores_repeat], 2)
         selected_feature = selected_feature.reshape(selected_feature.shape[0] * selected_feature.shape[1], selected_feature.shape[2])
-        selected_feature = torch.nan_to_num(selected_feature, -999.)
         return selected_feature
 
     def generate_pred_input_feature(self):
@@ -133,6 +126,7 @@ class PerRelSignalDataset(FusionDataset):
         tail_scores = []
         head_eval = []
         tail_eval = []
+        both_eval = []
         num_models = len(self.context_resource['models'])
         for m in self.context_resource['models']:
             m_context = self.context_resource[m]
@@ -141,9 +135,10 @@ class PerRelSignalDataset(FusionDataset):
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))
             tail_scores.append(torch.flatten(m_t_preds, start_dim=0, end_dim=1))
             m_rel_h_t_eval = self._get_rel_eval_scores(m_context['rel_eval'])
-            m_h_eval, m_t_eval = torch.chunk(m_rel_h_t_eval, 2, 1)
+            m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_rel_h_t_eval, 3, 1)
             head_eval.append(m_h_eval)
             tail_eval.append(m_t_eval)
+            both_eval.append(m_b_eval)
 
         candidate_num = int(head_scores[0].shape[0] / self.mapped_triples.shape[0])
         h_signal = torch.full((self.mapped_triples.shape[0], 1), 2).repeat(candidate_num, 1)

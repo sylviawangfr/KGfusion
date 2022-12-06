@@ -1,19 +1,25 @@
+import random
+
 import pandas as pd
 from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_scores_
 from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
 import torch
 from collections import Counter
-from FusionDataset import FusionDataset
+
+from torch.utils.data import Dataset
+
+from FusionDataset import FusionDataset, padding_sampling
+from common_utils import chart_input
 
 
-class ScoresOnlyDataset(FusionDataset):
+class TopKIndexDataset(Dataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
     def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
         self.dim = len(context_resource['models'])
 
-    def _get_neg_scores_for_training(self, dev_predictions, times=4):
+    def _get_neg_index_for_training(self, dev_predictions, times=2):
         # Create filter
         targets = [COLUMN_HEAD, COLUMN_TAIL]
         neg_scores = []
@@ -35,12 +41,11 @@ class ScoresOnlyDataset(FusionDataset):
             # remove -999 from scores_k
             nan_index = torch.nonzero(scores_k == -999.)
             indices_k[nan_index[:, 0], nan_index[:, 1]] = int(-1)
-            neg_scores.append(scores)
             neg_index.append(indices_k)
-        return neg_scores, neg_index
+        return neg_index
 
-    def generate_training_input_feature(self):
-        #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
+    def generate_training_neg_index(self):
+        #   [m1_score, m2_score, ... ]
         scores_neg = []
         scores_pos = []
         neg_index_topk_times = []
@@ -49,24 +54,15 @@ class ScoresOnlyDataset(FusionDataset):
             m_context = self.context_resource[m]
             m_dev_preds = m_context['eval']
             m_dev_preds = torch.chunk(m_dev_preds, 2, 1)
-            # get pos scores
-            m_pos_scores = m_dev_preds[0]
-            m_pos_scores = m_pos_scores[torch.arange(0, self.mapped_triples.shape[0]),
-                                                      self.mapped_triples[:, targets[0]]]
-            scores_pos.append(m_pos_scores.flatten())  # [s1,s2,...]
             # tri get neg scores
-            m_neg_scores, m_neg_index_topk4 = self._get_neg_scores_for_training(m_dev_preds) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
-            scores_neg.append(torch.stack(m_neg_scores, 1))  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
+            m_neg_index_topk4 = self._get_neg_index_for_training(m_dev_preds)
             neg_index_topk_times.append(torch.stack(m_neg_index_topk4, 1))
 
-        # # pos feature [m1_s1,m2_s1,....]
-        pos_features = torch.vstack(scores_pos).T
         # neg feature
-        neg_features = self._get_multi_model_neg_topk(scores_neg, neg_index_topk_times)
-        return pos_features, neg_features
+        neg_index = self._get_multi_model_neg_topk(scores_neg, neg_index_topk_times)
+        return neg_index
 
     def _get_multi_model_neg_topk(self, neg_score_ht, neg_index_topk):
-        num_models = len(neg_score_ht)
         selected_scores = []
         neg_scores = torch.stack(neg_score_ht, 0)
         neg_scores = torch.chunk(neg_scores, 2, 2)  # (h, t) tuple
@@ -85,15 +81,10 @@ class ScoresOnlyDataset(FusionDataset):
             idx_df = pd.DataFrame(data=topk_idx.numpy().T)
             idx_df = idx_df.groupby(idx_df.columns, axis=1).apply(lambda x: x.values).apply(lambda y:y.flatten())
             idx_df = idx_df.apply(lambda x:x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(self.num_neg)])
+            # for rows that less than num_neg, we randoms duplicate existing index
+            idx_df = idx_df.apply(lambda x: padding_sampling(x, self.num_neg))
             tmp_topk_idx = list(idx_df.values)
-            fill_topk = []
-            for i in tmp_topk_idx:
-                if len(i) == self.num_neg:
-                    fill_topk.append(i)
-                else:
-                    i.extend(list(range(self.num_neg - len(i))))
-                    fill_topk.append(i)
-            fill_topk = torch.as_tensor(fill_topk)
+            fill_topk = torch.as_tensor(tmp_topk_idx)
             target_neg_scores = target_neg_scores[torch.arange(0, target_neg_scores.shape[0]).unsqueeze(1), fill_topk]
             selected_scores.append(target_neg_scores)
 
@@ -103,7 +94,6 @@ class ScoresOnlyDataset(FusionDataset):
         sample_index = torch.multinomial(sample_weight, self.num_neg)
         scores_repeat = scores_repeat[torch.arange(0, scores_repeat.shape[0]).unsqueeze(1), sample_index]
         selected_feature = scores_repeat.reshape(scores_repeat.shape[0] * scores_repeat.shape[1], scores_repeat.shape[2])
-        selected_feature = torch.nan_to_num(selected_feature, -999.)
         return selected_feature
 
     def generate_pred_input_feature(self):
@@ -123,3 +113,5 @@ class ScoresOnlyDataset(FusionDataset):
         tail_scores = torch.vstack(tail_scores).T
         h_t_features = torch.concat([head_scores, tail_scores], 0)
         return h_t_features
+
+

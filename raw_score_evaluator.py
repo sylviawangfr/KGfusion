@@ -50,6 +50,7 @@ def predict_head_tail_scores(
     device = model.device
 
     # Ensure evaluation mode
+    model.predict_with_sigmoid = True
     model.eval()
     # Send tensors to device
     mapped_triples = mapped_triples.to(device=device)
@@ -109,6 +110,8 @@ def per_rel_rank_evaluate(model: Model,
     for key in ordered_keys:
         tmp_eval = per_group_eval[key].data
         head_tail_mrr.append([tmp_eval[('hits_at_10', 'head', 'realistic')],
-                              tmp_eval[('hits_at_10', 'tail', 'realistic')]])
+                              tmp_eval[('hits_at_10', 'tail', 'realistic')],
+                              tmp_eval[('hits_at_10', 'both', 'realistic')]])
     head_tail_mrr = torch.Tensor(head_tail_mrr)
     return head_tail_mrr
+

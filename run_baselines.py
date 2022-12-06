@@ -1,12 +1,14 @@
 import pykeen.datasets as ds
 from pykeen.losses import CrossEntropyLoss
 from pykeen.models import ComplEx, TuckER
-from pykeen.pipeline import pipeline
+from pykeen.pipeline import pipeline, replicate_pipeline_from_config, pipeline_from_config
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.regularizers import LpRegularizer
 import logging
 
+
 # logging.basicConfig(level=logging.DEBUG)
+from pykeen.utils import normalize_path, load_configuration
 
 
 def train_ComplEx2(dataset):
@@ -75,6 +77,7 @@ def train_ComplEx(dataset):
         evaluator_kwargs={"filtered": True}
     )
     return pipeline_result
+
 
 def train_TuckER(dataset):
     pipeline_result = pipeline(
@@ -158,13 +161,24 @@ def train_RotatE(dataset):
     return pipeline_result
 
 
-def train_multi_models(dataset, work_dir):
-    for m in ['ComplEx', 'TuckER', 'RotatE']:
+def train_NodePiece(dataset):
+    # extra_kwargs = dict(move_to_cpu=False,
+    #                     save_replicates=False,
+    #                     save_training=False)
+    path = normalize_path("galkin2022_nodepiece_{}.yaml".format(dataset))
+    pipeline_results = pipeline_from_config(config=load_configuration(path))
+    return pipeline_results
+
+
+def train_multi_models(dataset, model_list, work_dir):
+    for m in model_list:
         func_name = 'train_' + m
         pipeline_result = globals()[func_name](dataset)
-        pipeline_result.save_to_directory(work_dir+m+"/checkpoint/", save_metadata=True)
+        pipeline_result.save_to_directory(work_dir + m + "/checkpoint/", save_metadata=True)
 
 
 if __name__ == '__main__':
-    train_multi_models(dataset=ds.Nations(), work_dir="outputs/nations/")
-    # train_multi_models(dataset=ds.FB15k237(), work_dir="outputs/fb237/")
+    # train_multi_models(dataset=ds.Nations(), work_dir="outputs/nations/")
+    # train_multi_models(dataset=ds.FB15k237(), model_list=['ComplEx', 'TuckER', 'RotatE'], work_dir="outputs/fb237/")
+    # train_NodePiece('fb15k237')
+    train_multi_models('fb15k237', ['NodePiece'], work_dir="outputs/fb237/")

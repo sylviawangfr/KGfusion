@@ -6,7 +6,6 @@ from pykeen.pipeline import pipeline
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.utils import prepare_filter_triples
 from raw_score_evaluator import predict_head_tail_scores, per_rel_rank_evaluate
-from context_load_and_run import per_rel_eval, load_score_context, test_multi_models_eval_individual
 
 
 def test_lp():
