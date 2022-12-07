@@ -5,7 +5,7 @@ from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_s
 from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
 import torch
 from collections import Counter
-from FusionDataset import FusionDataset, padding_sampling
+from features.FusionDataset import FusionDataset, padding_sampling
 from common_utils import chart_input
 
 
@@ -47,20 +47,16 @@ class ScoresOnlyDataset(FusionDataset):
         scores_neg = []
         scores_pos = []
         neg_index_topk_times = []
-        targets = [COLUMN_HEAD, COLUMN_TAIL]
         for m in self.context_resource['models']:
             m_context = self.context_resource[m]
-            m_dev_preds = m_context['eval']
-            m_dev_preds = torch.chunk(m_dev_preds, 2, 1)
             # get pos scores
-            m_pos_scores = m_dev_preds[0]
-            m_pos_scores = m_pos_scores[torch.arange(0, self.mapped_triples.shape[0]),
-                                                      self.mapped_triples[:, targets[0]]]
-            scores_pos.append(m_pos_scores.flatten())  # [s1,s2,...]
+            m_pos_scores = m_context['eval_pos_scores']
+            scores_pos.append(m_pos_scores)  # [s1,s2,...]
             # tri get neg scores
-            m_neg_scores, m_neg_index_topk4 = self._get_neg_scores_for_training(m_dev_preds) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
-            scores_neg.append(torch.stack(m_neg_scores, 1))  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
-            neg_index_topk_times.append(torch.stack(m_neg_index_topk4, 1))
+            m_neg_scores = m_context['eval_neg_scores']
+            m_neg_index_topk4 = m_context['eval_neg_index']
+            scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
+            neg_index_topk_times.append(m_neg_index_topk4)
 
         # # pos feature [m1_s1,m2_s1,....]
         pos_features = torch.vstack(scores_pos).T
@@ -69,7 +65,7 @@ class ScoresOnlyDataset(FusionDataset):
         # debug
         p1 = torch.ones(pos_features.shape[0])
         p2 = torch.ones(neg_features.shape[0])
-        chart_input(pos_features[p1.multinomial(150)], neg_features[p2.multinomial(300)], '../outputs/feature.png')
+        chart_input(pos_features[p1.multinomial(150)], neg_features[p2.multinomial(300)], 'feature.png')
         return pos_features, neg_features
 
     def _get_multi_model_neg_topk(self, neg_score_ht, neg_index_topk):
@@ -83,15 +79,24 @@ class ScoresOnlyDataset(FusionDataset):
         #   The neg examples contain prediction scores and head/tail eval scores
         # we count the most frequent top_k examples from head and tail preds
         for target in range(2):
-            target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
+            # restore model scores and index to orginal indexed tensor in shape of [num_model, num_triples, num_candidates + 1]
+            # this is an important step to gather scores from multi-models.
             topk_idx = neg_index[target].squeeze()
+            max_index = torch.max(topk_idx)  # number of original candidates
+            tmp_scores = neg_scores[target].squeeze()
+            tmp_topk = torch.clone(topk_idx)
+            # add one extra column to handle the -999.0/-1 mask values. the masked values are not selected anyway.
+            tmp_topk[tmp_topk == -1] = max_index + 1
+            scattered_scores = torch.zeros([tmp_topk.shape[0], tmp_topk.shape[1], max_index + 2]).scatter_(2, tmp_topk, tmp_scores) # sigmoid scores [0-1]
+            # target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
+            target_neg_scores = scattered_scores.transpose(0, 1).transpose(1, 2)
             # count top_k frequent index
             backup_shape = topk_idx.shape
-            topk_idx = topk_idx.transpose(0,1).reshape([backup_shape[1], backup_shape[0]*backup_shape[2]])
+            topk_idx = topk_idx.transpose(0, 1).reshape([backup_shape[1], backup_shape[0]*backup_shape[2]])
             idx_df = pd.DataFrame(data=topk_idx.numpy().T)
             idx_df = idx_df.groupby(idx_df.columns, axis=1).apply(lambda x: x.values).apply(lambda y:y.flatten())
-            idx_df = idx_df.apply(lambda x:x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(self.num_neg)])
-            # for rows that less than num_neg, we randoms duplicate existing index
+            idx_df = idx_df.apply(lambda x: x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(self.num_neg)])
+            # for rows that less than num_neg, we randomly duplicate existing index
             idx_df = idx_df.apply(lambda x: padding_sampling(x, self.num_neg))
             tmp_topk_idx = list(idx_df.values)
             fill_topk = torch.as_tensor(tmp_topk_idx)
@@ -110,7 +115,6 @@ class ScoresOnlyDataset(FusionDataset):
         # s1,s2,...
         head_scores = []
         tail_scores = []
-        num_models = len(self.context_resource['models'])
         for m in self.context_resource['models']:
             m_context = self.context_resource[m]
             m_preds = m_context['preds']
@@ -118,7 +122,6 @@ class ScoresOnlyDataset(FusionDataset):
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))
             tail_scores.append(torch.flatten(m_t_preds, start_dim=0, end_dim=1))
 
-        candidate_num = int(head_scores[0].shape[0] / self.mapped_triples.shape[0])
         head_scores = torch.vstack(head_scores).T
         tail_scores = torch.vstack(tail_scores).T
         h_t_features = torch.concat([head_scores, tail_scores], 0)

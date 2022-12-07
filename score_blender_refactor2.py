@@ -25,7 +25,7 @@ from context_load_and_run import load_score_context
 from features.feature_per_rel_ht1_dataset import PerRelSignalDataset
 from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
-from main import get_all_pos_triples
+from pykeen_kge_raw_score_evaluator import get_all_pos_triples
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

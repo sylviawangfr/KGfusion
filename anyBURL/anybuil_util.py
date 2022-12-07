@@ -4,6 +4,7 @@ from itertools import zip_longest
 import pandas as pd
 import pykeen.datasets
 import torch
+import pandas as pd
 from pykeen.datasets import Nations
 
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir
@@ -13,28 +14,49 @@ def to_pykeen_eval_format(pred_index, pred_scores):
     pass
 
 
-def read_hrt_pred_anyburl(pred_anyburl_file, top_k=10):
+def read_hrt_pred_anyburl(mapped_triples, pred_anyburl_file, top_k=10):
     with open(pred_anyburl_file) as f:
         lines = f.readlines()
         chunks = zip_longest(*[iter(lines)] * 3, fillvalue='')
         h_preds = []
         t_preds = []
+        file_triples = []
         for chunk in chunks:
+            h, r, t = chunk[0].strip().split()
+            file_triples.append([int(h), int(r), int(t)])
             hs = chunk[1][7:].strip().split('\t')
-            h_preds.extend(torch.as_tensor([float(hs[i]) if i < len(hs) else -1 for i in range(top_k * 2)]))
+            h_preds.append(torch.as_tensor([float(hs[i]) if i < len(hs) else -1 for i in range(top_k * 2)]))
             ts = chunk[2][7:].strip().split('\t')
-            t_preds.extend(torch.as_tensor([float(ts[i]) if i < len(ts) else -1 for i in range(top_k * 2)]))
-        h_preds = torch.cat(h_preds, 0)
+            t_preds.append(torch.as_tensor([float(ts[i]) if i < len(ts) else -1 for i in range(top_k * 2)]))
+
+        h_preds = torch.stack(h_preds, 0)
+        t_preds = torch.stack(t_preds, 0)
         preserve_shape = h_preds.shape
         h_preds = h_preds.reshape([preserve_shape[0] * top_k, 2])
-        h_index = h_preds[:, 0].reshape([preserve_shape[0], top_k])
+        h_index = h_preds[:, 0].reshape([preserve_shape[0], top_k]).type(torch.int64)
         h_scores = h_preds[:, 1].reshape([preserve_shape[0], top_k])
         t_preds = t_preds.reshape([preserve_shape[0] * top_k, 2])
-        t_index = t_preds[:, 0].reshape([preserve_shape[0], top_k])
+        t_index = t_preds[:, 0].reshape([preserve_shape[0], top_k]).type(torch.int64)
         t_scores = t_preds[:, 1].reshape([preserve_shape[0], top_k])
-        pred_index = torch.cat([h_index, t_index], 1)
-        pred_scores = torch.cat([h_scores, t_scores], 1)
+        pred_index = torch.stack([h_index, t_index], 1)
+        pred_scores = torch.stack([h_scores, t_scores], 1)
+        # anyburl doesn't predict in order of input triples, we need sort result to compat with pykeen
+        # get index of triples
+        file_index = get_certain_index_in_tensor(mapped_triples, file_triples)
+        scattered_index = torch.full([mapped_triples.shape[0], 2, top_k], -1)
+        scattered_index[file_index] = pred_index
+        scattered_scores = torch.full([mapped_triples.shape[0], 2, top_k], 0) # [0-1]
+        scattered_scores[file_index] = pred_scores
     return pred_index, pred_scores
+
+
+def get_certain_index_in_tensor(src_tensor, target):
+    df_src = pd.DataFrame(data=src_tensor.numpy())
+    df_tgt = pd.DataFrame(data=target)
+    diff1 = pd.concat([df_src, df_tgt]).drop_duplicates(keep=False)
+    diff2 = pd.concat([df_src, diff1]).drop_duplicates(keep=False)
+    tgt_idx = diff2.index
+    return torch.as_tensor(tgt_idx)
 
 
 def mapped_triples_2_anyburl_hrt(dataset: pykeen.datasets.Dataset, anyburl_dir):
@@ -43,6 +65,14 @@ def mapped_triples_2_anyburl_hrt(dataset: pykeen.datasets.Dataset, anyburl_dir):
     df_train.to_csv(osp.join(anyburl_dir, f'train.txt'), header=False, index=False, sep='\t')
     df_dev = pd.DataFrame(dataset.validation.mapped_triples.numpy()).astype('int64')
     df_dev.to_csv(osp.join(anyburl_dir, f'valid.txt'), header=False, index=False, sep='\t')
+    # use dev as blender training set
+    df_test = pd.DataFrame(dataset.validation.mapped_triples.numpy()).astype('int64')
+    df_test.to_csv(osp.join(anyburl_dir, f'test.txt'), header=False, index=False, sep='\t')
+    wait_until_anyburl_data_ready(anyburl_dir)
+
+
+def mapped_test_2_anyburl_hrt2(dataset: pykeen.datasets.Dataset, anyburl_dir):
+    clean_anyburl_tmp_files(anyburl_dir)
     df_test = pd.DataFrame(dataset.testing.mapped_triples.numpy()).astype('int64')
     df_test.to_csv(osp.join(anyburl_dir, f'test.txt'), header=False, index=False, sep='\t')
     wait_until_anyburl_data_ready(anyburl_dir)
@@ -76,7 +106,6 @@ def prepare_anyburl_configs(anyburl_dir):
 def clean_anyburl_tmp_files(anyburl_dir):
     init_dir(f"{anyburl_dir}last_round/")
     os.system(f"[ -f {anyburl_dir}predictions/alpha* ] && mv {anyburl_dir}predictions/* {anyburl_dir}last_round/")
-    os.system(f"[ -f {anyburl_dir}config-apply.properties ] && mv {anyburl_dir}config-apply.properties {anyburl_dir}last_round/")
     os.system(f"[ -f {anyburl_dir}anyburl_eval.log ] && rm {anyburl_dir}anyburl_eval.log")
 
 
@@ -119,8 +148,8 @@ def anyburl_pipeline(dataset, workdir):
     # prepare_anyburl_configs(workdir)
     # learn_anyburl(workdir)
     # predict_with_anyburl(workdir)
-    df = read_hrt_pred_anyburl(workdir + "predictions/alpha-100")
-    to_pykeen_pred_format(df)
+    read_hrt_pred_anyburl(dataset.testing.mapped_triples, workdir + "predictions/alpha-100")
+
 
 
 

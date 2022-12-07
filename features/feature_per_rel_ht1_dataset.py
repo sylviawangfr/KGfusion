@@ -3,7 +3,7 @@ from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_s
 from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
 import torch
 from collections import Counter
-from FusionDataset import FusionDataset, padding_sampling
+from features.FusionDataset import FusionDataset, padding_sampling
 
 
 class PerRelSignalDataset(FusionDataset):

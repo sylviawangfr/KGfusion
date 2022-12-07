@@ -5,7 +5,7 @@ from pykeen.datasets import Nations, FB15k237
 from pykeen.pipeline import pipeline
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.utils import prepare_filter_triples
-from raw_score_evaluator import predict_head_tail_scores, per_rel_rank_evaluate
+from pykeen_kge_raw_score_evaluator import predict_head_tail_scores, per_rel_rank_evaluate
 
 
 def test_lp():
@@ -29,15 +29,6 @@ def test_lp():
     model_preds = predict_head_tail_scores(pipeline_result.model, dataset.testing.mapped_triples, mode=None)
 
 
-def get_all_pos_triples(dataset: pykeen.datasets.Dataset):
-    all_pos_triples = prepare_filter_triples(
-        mapped_triples=dataset.testing.mapped_triples,
-        additional_filter_triples=[
-            dataset.training.mapped_triples,
-            dataset.validation.mapped_triples,
-        ],
-    )
-    return all_pos_triples
 
 
 if __name__ == '__main__':
