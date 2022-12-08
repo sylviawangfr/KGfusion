@@ -154,7 +154,7 @@ def get_additional_filter_triples(do_filter_validation, training, validation=Non
 def per_model_pred(model_keywords: [], dataset: pykeen.datasets, work_dir='', top_k=10):
     device: torch.device = resolve_device()
     logger.info(f"Using device: {device}")
-    all_pos_scores = get_all_pos_triples(dataset)
+    all_pos_triples = get_all_pos_triples(dataset)
     for m in model_keywords:
         m_dir = work_dir + m + "/checkpoint/trained_model.pkl"
         m_out_dir = work_dir + m + "/"
@@ -166,7 +166,7 @@ def per_model_pred(model_keywords: [], dataset: pykeen.datasets, work_dir='', to
         pos_scores = m_dev_preds[0]
         pos_scores = pos_scores[torch.arange(0, dataset.validation.mapped_triples.shape[0]),
                                     dataset.validation.mapped_triples[:, 0]]
-        neg_scores, neg_index_topk = get_neg_scores_top_k(dataset.validation.mapped_triples, m_dev_preds, all_pos_scores, top_k) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
+        neg_scores, neg_index_topk = get_neg_scores_top_k(dataset.validation.mapped_triples, m_dev_preds, all_pos_triples, top_k) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
         torch.save(pos_scores, m_out_dir + "eval_pos_scores.pt")
         torch.save(neg_scores, m_out_dir + "eval_neg_scores.pt")
         torch.save(neg_index_topk, m_out_dir + "eval_neg_index.pt")
