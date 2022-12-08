@@ -16,32 +16,6 @@ class ScoresOnlyDataset(FusionDataset):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
         self.dim = len(context_resource['models'])
 
-    def _get_neg_scores_for_training(self, dev_predictions, times=2):
-        # Create filter
-        targets = [COLUMN_HEAD, COLUMN_TAIL]
-        neg_scores = []
-        neg_index = []
-        for index in range(2):
-            # exclude positive triples
-            positive_filter, _ = create_sparse_positive_filter_(
-                hrt_batch=self.mapped_triples,
-                all_pos_triples=self.all_pos_triples,
-                relation_filter=None,
-                filter_col=targets[index],
-            )
-            scores = filter_scores_(scores=dev_predictions[index], filter_batch=positive_filter)
-            # random pick top_k negs, if no more than top_k, then fill with -999.
-            # However the top_k from different model is not always the same
-            # Our solution is that we pick the top_k * 2 candidates, and pick the most frequent index
-            select_range = self.num_neg * times if self.num_neg * times < scores.shape[-1] else scores.shape[-1]
-            scores_k, indices_k = torch.nan_to_num(scores, nan=-999.).topk(k=select_range)
-            # remove -999 from scores_k
-            nan_index = torch.nonzero(scores_k == -999.)
-            indices_k[nan_index[:, 0], nan_index[:, 1]] = int(-1)
-            neg_scores.append(scores)
-            neg_index.append(indices_k)
-        return neg_scores, neg_index
-
     def generate_training_input_feature(self):
         #   [m1_score, m2_score, ... ]
         scores_neg = []
@@ -63,9 +37,9 @@ class ScoresOnlyDataset(FusionDataset):
         # neg feature
         neg_features = self._get_multi_model_neg_topk(scores_neg, neg_index_topk_times)
         # debug
-        p1 = torch.ones(pos_features.shape[0])
-        p2 = torch.ones(neg_features.shape[0])
-        chart_input(pos_features[p1.multinomial(150)], neg_features[p2.multinomial(300)], 'feature.png')
+        # p1 = torch.ones(pos_features.shape[0])
+        # p2 = torch.ones(neg_features.shape[0])
+        # chart_input(pos_features[p1.multinomial(150)], neg_features[p2.multinomial(300)], 'feature.png')
         return pos_features, neg_features
 
     def _get_multi_model_neg_topk(self, neg_score_ht, neg_index_topk):

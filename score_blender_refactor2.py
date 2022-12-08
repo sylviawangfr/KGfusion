@@ -337,7 +337,7 @@ def pipeline_aggregation(dataset, para):
 if __name__ == '__main__':
     model_l = ['ComplEx', 'TuckER', 'RotatE']
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
+    parser.add_argument('--models', type=str, default="RotatE_anyburl")
     parser.add_argument('--dataset', type=str, default="Nations")
     parser.add_argument('--dataloader', type=str, default="3")
     parser.add_argument('--linear', type=str, default="1")

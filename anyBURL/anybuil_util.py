@@ -161,14 +161,14 @@ def mapped_test_2_anyburl_hrt_test(dataset: pykeen.datasets.Dataset, anyburl_dir
     wait_until_anyburl_data_ready(anyburl_dir)
 
 
-def prepare_anyburl_configs(anyburl_dir):
+def prepare_anyburl_configs(anyburl_dir, top_k=10):
     config_apply = f"PATH_TRAINING  = {anyburl_dir}train.txt\n" \
                    f"PATH_TEST      = {anyburl_dir}test.txt\n" \
                    f"PATH_VALID     = {anyburl_dir}valid.txt\n" \
                    f"PATH_RULES     = {anyburl_dir}rules/alpha-100\n" \
                    f"PATH_OUTPUT    = {anyburl_dir}predictions/alpha-100\n" \
                    "UNSEEN_NEGATIVE_EXAMPLES = 5\n" \
-                   "TOP_K_OUTPUT = 10\n" \
+                   f"TOP_K_OUTPUT = {top_k}\n" \
                    "WORKER_THREADS = 7"
     config_eval = f"PATH_TRAINING  = {anyburl_dir}train.txt\n" \
                   f"PATH_TEST      = {anyburl_dir}test.txt\n" \
