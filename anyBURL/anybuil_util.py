@@ -5,7 +5,7 @@ import pandas as pd
 import pykeen.datasets
 import torch
 import pandas as pd
-from pykeen.datasets import Nations
+from pykeen.datasets import Nations, FB15k237
 
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir
 from pykeen_kge_raw_score_evaluator import get_neg_scores_top_k, get_all_pos_triples
@@ -22,9 +22,9 @@ def read_hrt_pred_anyburl(anyburl_dir, top_k=10):
             h, r, t = chunk[0].strip().split()
             file_triples.append([int(h), int(r), int(t)])
             hs = chunk[1][7:].strip().split('\t')
-            h_preds.append(torch.as_tensor([float(hs[i]) if i < len(hs) else -1 for i in range(top_k * 2)]))
+            h_preds.append(torch.as_tensor([float(hs[i]) if (i < len(hs) and hs[i] != '') else -1 for i in range(top_k * 2)]))
             ts = chunk[2][7:].strip().split('\t')
-            t_preds.append(torch.as_tensor([float(ts[i]) if i < len(ts) else -1 for i in range(top_k * 2)]))
+            t_preds.append(torch.as_tensor([float(ts[i]) if (i < len(ts) and ts[i] != '') else -1 for i in range(top_k * 2)]))
     h_preds = torch.stack(h_preds, 0)
     t_preds = torch.stack(t_preds, 0)
     preserve_shape = h_preds.shape
@@ -200,7 +200,7 @@ def wait_until_anyburl_data_ready(anyburl_dir):
 def learn_anyburl(work_dir):
     if work_dir[-1] == '/':
         work_dir = work_dir[:-1]
-    os.system('run_anyburl.sh ' + work_dir)
+    os.system('./run_anyburl.sh ' + work_dir)
     wait_until_file_is_saved(work_dir + "/rules/alpha-100", 60)
 
 
@@ -220,4 +220,8 @@ def clean_anyburl(work_dir):
 
 if __name__ == "__main__":
     # dev_pred(Nations(), '../outputs/nations/anyburl/', top_k=10)
-    test_pred(Nations(), '../outputs/nations/anyburl/', top_k=10)
+    # test_pred(Nations(), '../outputs/nations/anyburl/', top_k=10)
+    d = FB15k237()
+    wd = '../outputs/fb237/anyburl/'
+    dev_pred(d, wd, top_k=500)
+    test_pred(d, wd, top_k=500)

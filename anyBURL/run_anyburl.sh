@@ -28,7 +28,7 @@ else
 fi
 
 
-[ ! -f "$WORK_DIR/AnyBURL-JUNO.jar" ] && cp ../anyBURL/AnyBURL-JUNO.jar $WORK_DIR/
+[ ! -f "$WORK_DIR/AnyBURL-JUNO.jar" ] && cp ./AnyBURL-JUNO.jar $WORK_DIR/
 echo "Learning horn rules via AnyBURLs..."
 java -Xmx15G -cp $WORK_DIR/AnyBURL-JUNO.jar de.unima.ki.anyburl.LearnReinforced $WORK_DIR/config-learn.properties
 # the following cmds are not executed after last cmd exits from multi-threads
