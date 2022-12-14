@@ -9,7 +9,7 @@ from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 from blender_utils import restore_eval_format
-from common_utils import format_result
+from common_utils import format_result, save_to_file
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,9 @@ class PlattScalingBlender:
                 relation_filter=relation_filter,
             )
         result = evaluator.finalize()
-        print(format_result(result))
+        str_re = format_result(result)
+        save_to_file(str_re, work_dir + "cali.log")
+        print(str_re)
         return result
 
 

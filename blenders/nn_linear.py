@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from mlflow import log_param
 import mlflow.pytorch
-from common_utils import format_result
+from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
@@ -231,8 +231,11 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
             relation_filter=relation_filter,
         )
     result = evaluator.finalize()
+    str_re = format_result(result)
+    save_to_file(str_re, para['work_dir'] + "nn.log")
+    print(str_re)
     if para['mlflow']:
-        mlflow.log_param('result', format_result(result))
+        mlflow.log_param('result', str_re)
     return result
 
 

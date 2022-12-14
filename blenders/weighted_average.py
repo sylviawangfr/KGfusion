@@ -4,7 +4,7 @@ from pykeen.datasets import get_dataset
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from blenders.blender_utils import restore_eval_format
-from common_utils import format_result
+from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
@@ -43,7 +43,9 @@ class WeightedAverageBlender:
                 relation_filter=relation_filter,
             )
         result = evaluator.finalize()
-        print(format_result(result))
+        str_re = format_result(result)
+        save_to_file(str_re, work_dir + "w_avg.log")
+        print(str_re)
         return result
 
 
