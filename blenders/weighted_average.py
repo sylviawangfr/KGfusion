@@ -7,7 +7,7 @@ from blenders.blender_utils import restore_eval_format
 from common_utils import format_result
 from context_load_and_run import load_score_context
 from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
-from lp_pykeen.lp_pykeen import get_all_pos_triples
+from lp_kge.lp_pykeen import get_all_pos_triples
 
 
 class WeightedAverageBlender:

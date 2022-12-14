@@ -7,7 +7,7 @@ from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
-from lp_pykeen.lp_pykeen import get_all_pos_triples
+from lp_kge.lp_pykeen import get_all_pos_triples
 from blender_utils import restore_eval_format
 from common_utils import format_result
 

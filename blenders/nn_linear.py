@@ -20,7 +20,7 @@ from common_utils import format_result
 from context_load_and_run import load_score_context
 from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
-from lp_pykeen.lp_pykeen import get_all_pos_triples
+from lp_kge.lp_pykeen import get_all_pos_triples
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

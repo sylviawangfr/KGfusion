@@ -7,7 +7,7 @@ import pandas as pd
 from pykeen.datasets import FB15k237, UMLS
 
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir
-from lp_pykeen.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples
+from lp_kge.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples
 
 
 def read_hrt_pred_anyburl(anyburl_dir, top_k=10):
