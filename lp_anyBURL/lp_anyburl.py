@@ -1,14 +1,13 @@
 import os
 import os.path as osp
 from itertools import zip_longest
-import pandas as pd
 import pykeen.datasets
 import torch
 import pandas as pd
-from pykeen.datasets import Nations, FB15k237
+from pykeen.datasets import FB15k237, UMLS
 
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir
-from pykeen_kge_raw_score_evaluator import get_neg_scores_top_k, get_all_pos_triples
+from lp_pykeen.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples
 
 
 def read_hrt_pred_anyburl(anyburl_dir, top_k=10):
@@ -60,7 +59,7 @@ def to_fusion_eval_format(dataset: pykeen.datasets.Dataset, file_triples: [], pr
     torch.save(neg_index_topk, out_dir + "eval_neg_index.pt")
 
 
-def to_fusion_test_format(dataset, file_triples: [], pred_index, pred_scores, out_dir, top_k=10):
+def to_fusion_test_format(dataset, file_triples: [], pred_index, pred_scores, out_dir):
     # anyburl doesn't predict in order of input triples, we need sort result to compat with pykeen
     mapped_triples = dataset.testing.mapped_triples
     num_candidates = dataset.num_entities
@@ -114,23 +113,23 @@ def calc_hit_at_10(pred_idx, ground_truth_idx):
     return hits_at_10.item()
 
 
-def dev_pred(dataset: pykeen.datasets.Dataset, anyburl_dir, top_k=10):
-    mapped_triples_2_anyburl_hrt_dev(dataset, anyburl_dir)
-    prepare_anyburl_configs(anyburl_dir)
-    learn_anyburl(anyburl_dir)
-    predict_with_anyburl(anyburl_dir)
-    file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, top_k=top_k)
-    all_pos_triples = get_all_pos_triples(dataset)
-    to_fusion_eval_format(dataset, file_triples, pred_index, pred_scores, all_pos_triples, anyburl_dir, top_k)
-    per_rel_eval(dataset.validation.mapped_triples, file_triples, pred_index, anyburl_dir)
+# def dev_pred(dataset: pykeen.datasets.Dataset, anyburl_dir, top_k=10):
+#     mapped_triples_2_anyburl_hrt_dev(dataset, anyburl_dir)
+#     prepare_anyburl_configs(anyburl_dir)
+#     learn_anyburl(anyburl_dir)
+#     predict_with_anyburl(anyburl_dir)
+#     file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, top_k=top_k)
+#     all_pos_triples = get_all_pos_triples(dataset)
+#     to_fusion_eval_format(dataset, file_triples, pred_index, pred_scores, all_pos_triples, anyburl_dir, top_k)
+#     per_rel_eval(dataset.validation.mapped_triples, file_triples, pred_index, anyburl_dir)
 
-
-def test_pred(dataset, anyburl_dir, top_k=10):
-    clean_anyburl_tmp_files(anyburl_dir)
-    mapped_test_2_anyburl_hrt_test(dataset, anyburl_dir)
-    predict_with_anyburl(anyburl_dir)
-    file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, top_k=top_k)
-    to_fusion_test_format(dataset, file_triples, pred_index, pred_scores, anyburl_dir, top_k)
+#
+# def test_pred(dataset, anyburl_dir, top_k=10):
+#     clean_anyburl_tmp_files(anyburl_dir)
+#     mapped_test_2_anyburl_hrt_test(dataset, anyburl_dir)
+#     predict_with_anyburl(anyburl_dir)
+#     file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, top_k=top_k)
+#     to_fusion_test_format(dataset, file_triples, pred_index, pred_scores, anyburl_dir)
 
 
 def get_certain_index_in_tensor(src_tensor, target):
@@ -218,10 +217,38 @@ def clean_anyburl(work_dir):
     os.system('clean_anyburl.sh ' + work_dir)
 
 
+class LpAnyBURL:
+    def __init__(self, dataset, work_dir):
+        self.dataset = dataset
+        self.work_dir = work_dir
+
+    def dev_pred(self, top_k):
+        mapped_triples_2_anyburl_hrt_dev(self.dataset, self.work_dir)
+        prepare_anyburl_configs(self.work_dir)
+        learn_anyburl(self.work_dir)
+        predict_with_anyburl(self.work_dir)
+        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, top_k=top_k)
+        all_pos_triples = get_all_pos_triples(self.dataset)
+        to_fusion_eval_format(self.dataset, file_triples, pred_index, pred_scores, all_pos_triples, self.work_dir, top_k)
+        per_rel_eval(self.dataset.validation.mapped_triples, file_triples, pred_index, self.work_dir)
+
+    def test_pred(self, top_k):
+        clean_anyburl_tmp_files(self.work_dir)
+        mapped_test_2_anyburl_hrt_test(self.work_dir, self.work_dir)
+        predict_with_anyburl(self.work_dir)
+        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, top_k=top_k)
+        to_fusion_test_format(self.dataset, file_triples, pred_index, pred_scores, self.work_dir)
+
+
 if __name__ == "__main__":
     # dev_pred(Nations(), '../outputs/nations/anyburl/', top_k=10)
     # test_pred(Nations(), '../outputs/nations/anyburl/', top_k=10)
-    d = FB15k237()
-    wd = '../outputs/fb237/anyburl/'
-    dev_pred(d, wd, top_k=500)
-    test_pred(d, wd, top_k=500)
+    # d = FB15k237()
+    # wd = '../outputs/fb237/anyburl/'
+    d = UMLS()
+    dirtmp = '../outputs/umls/anyburl/'
+    topk=100
+    lp = LpAnyBURL(d, dirtmp)
+    lp.dev_pred(topk)
+    lp.test_pred(topk)
+

@@ -10,7 +10,7 @@ import numpy as np
 from tqdm.autonotebook import tqdm
 import logging
 from typing import List
-from pykeen.datasets import FB15k237, Nations
+from pykeen.datasets import FB15k237, Nations, UMLS
 import pykeen
 import torch
 import pandas as pd
@@ -151,30 +151,6 @@ def get_additional_filter_triples(do_filter_validation, training, validation=Non
     return additional_filter_triples
 
 
-def per_model_pred(model_keywords: [], dataset: pykeen.datasets, work_dir='', top_k=10):
-    device: torch.device = resolve_device()
-    logger.info(f"Using device: {device}")
-    all_pos_triples = get_all_pos_triples(dataset)
-    for m in model_keywords:
-        m_dir = work_dir + m + "/checkpoint/trained_model.pkl"
-        m_out_dir = work_dir + m + "/"
-        single_model = torch.load(m_dir)
-        single_model = single_model.to(device)
-        # pykeen KGE dev prediction scores, ordered by scores. we need both pos scores and neg scores, and there index
-        eval_preds = predict_head_tail_scores(single_model, dataset.validation.mapped_triples, mode=None) # head_preds + t_preds
-        m_dev_preds = torch.chunk(eval_preds, 2, 1)
-        pos_scores = m_dev_preds[0]
-        pos_scores = pos_scores[torch.arange(0, dataset.validation.mapped_triples.shape[0]),
-                                    dataset.validation.mapped_triples[:, 0]]
-        neg_scores, neg_index_topk = get_neg_scores_top_k(dataset.validation.mapped_triples, m_dev_preds, all_pos_triples, top_k) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
-        torch.save(pos_scores, m_out_dir + "eval_pos_scores.pt")
-        torch.save(neg_scores, m_out_dir + "eval_neg_scores.pt")
-        torch.save(neg_index_topk, m_out_dir + "eval_neg_index.pt")
-        # save all scores for testing set
-        test_preds = predict_head_tail_scores(single_model, dataset.testing.mapped_triples, mode=None)
-        torch.save(test_preds, m_out_dir + "preds.pt")
-
-
 def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k):
     # Create filter
     targets = [COLUMN_HEAD, COLUMN_TAIL]
@@ -204,28 +180,74 @@ def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k
     return neg_scores, neg_index
 
 
-def per_model_eval(model_keywords: [], dataset: pykeen.datasets, work_dir=''):
-    mapped_triples_eval = dataset.validation.mapped_triples
-    triples_df = pd.DataFrame(data=mapped_triples_eval.numpy(), columns=['h', 'r', 't'])
-    groups = triples_df.groupby('r', group_keys=True, as_index=False)
-    releval2idx = {key: idx for idx, key in enumerate(groups.groups.keys())}
-    ordered_keys = releval2idx.keys()
-    device: torch.device = resolve_device()
-    logger.info(f"Using device: {device}")
-    evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, dataset.training)}
-    for m in model_keywords:
-        m_dir = work_dir + m + "/checkpoint/trained_model.pkl"
-        m_out_dir = work_dir + m + "/"
-        single_model = torch.load(m_dir)
-        single_model = single_model.to(device)
-        per_rel_eval = per_rel_rank_evaluate(single_model, groups, ordered_keys, **evaluation_kwargs)
-        torch.save(per_rel_eval.detach().cpu(), m_out_dir + "rel_eval.pt")
-    save2json(releval2idx, work_dir + "releval2idx.json")
+class LpKGE:
+    def __init__(self, dataset, models, work_dir):
+        self.dataset = dataset
+        self.models = models
+        self.work_dir = work_dir
+
+    def dev_eval(self):
+        mapped_triples_eval = self.dataset.validation.mapped_triples
+        triples_df = pd.DataFrame(data=mapped_triples_eval.numpy(), columns=['h', 'r', 't'])
+        groups = triples_df.groupby('r', group_keys=True, as_index=False)
+        releval2idx = {key: idx for idx, key in enumerate(groups.groups.keys())}
+        ordered_keys = releval2idx.keys()
+        device: torch.device = resolve_device()
+        logger.info(f"Using device: {device}")
+        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training)}
+        for m in self.models:
+            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
+            m_out_dir = self.work_dir + m + "/"
+            single_model = torch.load(m_dir)
+            single_model = single_model.to(device)
+            per_rel_eval = per_rel_rank_evaluate(single_model, groups, ordered_keys, **evaluation_kwargs)
+            torch.save(per_rel_eval.detach().cpu(), m_out_dir + "rel_eval.pt")
+        save2json(releval2idx, self.work_dir + "releval2idx.json")
+
+    def dev_pred(self, top_k):
+        device: torch.device = resolve_device()
+        logger.info(f"Using device: {device}")
+        all_pos_triples = get_all_pos_triples(self.dataset)
+        for m in self.models:
+            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
+            m_out_dir = self.work_dir + m + "/"
+            single_model = torch.load(m_dir)
+            single_model = single_model.to(device)
+            # pykeen KGE dev prediction scores, ordered by scores. we need both pos scores and neg scores, and there index
+            eval_preds = predict_head_tail_scores(single_model, self.dataset.validation.mapped_triples, mode=None) # head_preds + t_preds
+            m_dev_preds = torch.chunk(eval_preds, 2, 1)
+            pos_scores = m_dev_preds[0]
+            pos_scores = pos_scores[torch.arange(0, self.dataset.validation.mapped_triples.shape[0]),
+                                    self.dataset.validation.mapped_triples[:, 0]]
+            neg_scores, neg_index_topk = get_neg_scores_top_k(self.dataset.validation.mapped_triples, m_dev_preds, all_pos_triples, top_k) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
+            torch.save(pos_scores, m_out_dir + "eval_pos_scores.pt")
+            torch.save(neg_scores, m_out_dir + "eval_neg_scores.pt")
+            torch.save(neg_index_topk, m_out_dir + "eval_neg_index.pt")
+            # save all scores for testing set
+            test_preds = predict_head_tail_scores(single_model, self.dataset.testing.mapped_triples, mode=None)
+            torch.save(test_preds, m_out_dir + "preds.pt")
+
+    def test_pred(self):
+        device: torch.device = resolve_device()
+        logger.info(f"Using device: {device}")
+        for m in self.models:
+            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
+            m_out_dir = self.work_dir + m + "/"
+            single_model = torch.load(m_dir)
+            single_model = single_model.to(device)
+            # save all scores for testing set
+            test_preds = predict_head_tail_scores(single_model, self.dataset.testing.mapped_triples, mode=None)
+            torch.save(test_preds, m_out_dir + "preds.pt")
 
 
 if __name__ == '__main__':
-    d = Nations()
-    dirtmp = 'outputs/nations/'
+    # d = Nations()
+    # dirtmp = 'outputs/nations/'
     # d = FB15k237()
     # dirtmp = 'outputs/fb237/'
-    per_model_pred(['ComplEx', 'TuckER', 'RotatE'], d, work_dir=dirtmp)
+    d = UMLS()
+    dirtmp = '../outputs/umls/'
+    pykeen_lp = LpKGE(dataset=d, models=['ComplEx', 'TuckER'], work_dir=dirtmp)
+    pykeen_lp.dev_pred(top_k=100)
+    pykeen_lp.dev_eval()
+    pykeen_lp.test_pred()

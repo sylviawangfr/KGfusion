@@ -3,7 +3,7 @@ from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_s
 from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
 import torch
 from collections import Counter
-from features.FusionDataset import FusionDataset, padding_sampling
+from features.FusionDataset import FusionDataset, padding_sampling, get_multi_model_neg_topk
 
 
 class PerRelNoSignalDataset(FusionDataset):
@@ -46,96 +46,41 @@ class PerRelNoSignalDataset(FusionDataset):
         return rel_h_t_eval
 
     def generate_training_input_feature(self):
-        #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
-        head_eval = []
-        tail_eval = []
-        both_eval = []
+        #   [m1_score, m2_score, ... ]
         scores_neg = []
         scores_pos = []
+        both_eval = []
         neg_index_topk_times = []
-        rel_eval = []
-        targets = [COLUMN_HEAD, COLUMN_TAIL]
         for m in self.context_resource['models']:
             m_context = self.context_resource[m]
-            m_dev_preds = m_context['eval']
-            m_dev_preds = torch.chunk(m_dev_preds, 2, 1)
-
-            m_rel_h_t_eval = self._get_rel_eval_scores(m_context['rel_eval'])
-            m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_rel_h_t_eval, 3, 1)
-            head_eval.append(m_h_eval)
-            tail_eval.append(m_t_eval)
-            both_eval.append(m_b_eval)
-            rel_eval.append(m_rel_h_t_eval.flatten())
             # get pos scores
-            m_pos_scores = m_dev_preds[0]
-            m_pos_scores = m_pos_scores[torch.arange(0, self.mapped_triples.shape[0]),
-                                                      self.mapped_triples[:, targets[0]]]
-            # [h1,h2...]
-            scores_pos.append(m_pos_scores.flatten())  # [s1,s2,...]
+            m_pos_scores = m_context['eval_pos_scores']
+            scores_pos.append(m_pos_scores)  # [s1,s2,...]
             # tri get neg scores
-            m_neg_scores, m_neg_index_topk4 = self._get_neg_scores_for_training(m_dev_preds) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
-            scores_neg.append(torch.stack(m_neg_scores, 1))  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
-            neg_index_topk_times.append(torch.stack(m_neg_index_topk4, 1))
-
-        # # eval features
-        scores_pos = torch.vstack(scores_pos).T  # [[m1_h1,m2_h1,...] ...]
-        # rel_eval = torch.vstack(rel_eval).T  # [[m1_h1_eval,m2_h1_eval,...][m1_t1_eval,m2_t1_eval,...] ...]
-        head_eval = torch.hstack(head_eval)
-        tail_eval = torch.hstack(tail_eval)
-        both_eval = torch.hstack(both_eval)
-        # # pos feature [m1_s1,m2_s1,....m1_h1_eval,m2_h1_eval,...m1_t1_eval,m2_t1_eval,...]
-        # preserve_shape = rel_eval.shape
-        # pos_features = torch.concat([rel_eval.reshape(int(preserve_shape[0] / 2), preserve_shape[1] * 2),
-        #                              scores_pos], 1)
-        pos_features = torch.concat([both_eval, scores_pos], 1)
+            m_neg_scores = m_context['eval_neg_scores']
+            m_neg_index_topk4 = m_context['eval_neg_index']
+            scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
+            neg_index_topk_times.append(m_neg_index_topk4)
+            # model eval hit@N
+            m_hrb_eval = self._get_rel_eval_scores(m_context['rel_eval'])
+            m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_hrb_eval, 3, 1)
+            both_eval.append(m_b_eval)
+        # # pos feature [m1_eval, m2_eva., ... m1_s1,m2_s1,....]
+        scores_pos = torch.vstack(scores_pos).T
         # neg feature
-        # torch.cat([head_eval, tail_eval], 1)
-        neg_features = self._get_multi_model_neg_topk(scores_neg, neg_index_topk_times, both_eval)
+        scores_neg = get_multi_model_neg_topk(scores_neg, neg_index_topk_times, self.num_neg)
+        # eval scores
+        both_eval = torch.hstack(both_eval)
+        pos_features = torch.concat([both_eval, scores_pos], 1)
+        num_models = len(self.context_resource['models'])
+        eval_repeat = torch.reshape(both_eval.repeat(1, self.num_neg), (both_eval.shape[0] * self.num_neg, num_models))
+        neg_features = torch.cat([eval_repeat, scores_neg], -1)
         return pos_features, neg_features
-
-    def _get_multi_model_neg_topk(self, neg_score_ht, neg_index_topk, ht_eval):
-        num_models = len(neg_score_ht)
-        selected_scores = []
-        neg_scores = torch.stack(neg_score_ht, 0)
-        neg_scores = torch.chunk(neg_scores, 2, 2)  # (h, t) tuple
-        neg_index = torch.stack(neg_index_topk, 0)
-        neg_index = torch.chunk(neg_index, 2, 2)
-        #   [e1,h,e3,..],r,t
-        #   h,r,[t,e2,...]
-        #   The neg examples contain prediction scores and head/tail eval scores
-        # we count the most frequent top_k examples from head and tail preds
-        for target in range(2):
-            target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
-            topk_idx = neg_index[target].squeeze()
-            # count top_k frequent index
-            backup_shape = topk_idx.shape
-            topk_idx = topk_idx.transpose(0,1).reshape([backup_shape[1], backup_shape[0]*backup_shape[2]])
-            idx_df = pd.DataFrame(data=topk_idx.numpy().T)
-            idx_df = idx_df.groupby(idx_df.columns, axis=1).apply(lambda x: x.values).apply(lambda y:y.flatten())
-            idx_df = idx_df.apply(lambda x:x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(self.num_neg)])
-            idx_df = idx_df.apply(lambda x: padding_sampling(x, self.num_neg))
-            tmp_topk_idx = list(idx_df.values)
-            fill_topk = torch.as_tensor(tmp_topk_idx)
-            target_neg_scores = target_neg_scores[torch.arange(0, target_neg_scores.shape[0]).unsqueeze(1), fill_topk]
-            selected_scores.append(target_neg_scores)
-
-        # eval_repeat = torch.reshape(ht_eval.repeat(1, self.num_neg), (ht_eval.shape[0], self.num_neg, num_models * ht_eval.shape[-1]))
-        eval_repeat = torch.reshape(ht_eval.repeat(1, self.num_neg), (ht_eval.shape[0], self.num_neg, num_models))
-        scores_repeat = torch.cat(selected_scores, 1)
-        # random select from  top_k * times
-        sample_weight = torch.ones(scores_repeat.shape[0], scores_repeat.shape[1])
-        sample_index = torch.multinomial(sample_weight, self.num_neg)
-        scores_repeat = scores_repeat[torch.arange(0, scores_repeat.shape[0]).unsqueeze(1), sample_index]
-        selected_feature = torch.cat([eval_repeat, scores_repeat], 2)
-        selected_feature = selected_feature.reshape(selected_feature.shape[0] * selected_feature.shape[1], selected_feature.shape[2])
-        return selected_feature
 
     def generate_pred_input_feature(self):
         # s1,m1_h_eval,... m1_t_eval
         head_scores = []
         tail_scores = []
-        # head_eval = []
-        # tail_eval = []
         both_eval = []
         num_models = len(self.context_resource['models'])
         for m in self.context_resource['models']:
@@ -146,14 +91,9 @@ class PerRelNoSignalDataset(FusionDataset):
             tail_scores.append(torch.flatten(m_t_preds, start_dim=0, end_dim=1))
             m_rel_h_t_eval = self._get_rel_eval_scores(m_context['rel_eval'])
             m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_rel_h_t_eval, 3, 1)
-            # head_eval.append(m_h_eval)
-            # tail_eval.append(m_t_eval)
             both_eval.append(m_b_eval)
 
         candidate_num = int(head_scores[0].shape[0] / self.mapped_triples.shape[0])
-        # head_eval = torch.hstack(head_eval).repeat((1, candidate_num)).reshape([candidate_num * self.mapped_triples.shape[0], num_models])
-        # tail_eval = torch.hstack(tail_eval).repeat((1, candidate_num)).reshape([candidate_num * self.mapped_triples.shape[0], num_models])
-        # eval_feature = torch.cat([head_eval, tail_eval], 1)
         eval_feature = torch.hstack(both_eval).repeat((1, candidate_num)).reshape([candidate_num * self.mapped_triples.shape[0], num_models])
         head_scores = torch.vstack(head_scores).T
         tail_scores = torch.vstack(tail_scores).T

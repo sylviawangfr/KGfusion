@@ -1,4 +1,7 @@
+import argparse
+
 import pykeen.datasets as ds
+from pykeen.datasets import ConceptNet, UMLS, get_dataset
 from pykeen.losses import CrossEntropyLoss
 from pykeen.models import ComplEx, TuckER
 from pykeen.pipeline import pipeline, replicate_pipeline_from_config, pipeline_from_config
@@ -31,6 +34,7 @@ def train_ComplEx2(dataset):
         negative_sampler_kwargs={"num_negs_per_pos": 10},
         training_kwargs={
             "num_epochs": 1000,
+            # "num_epochs": 10,
             "batch_size": 1024
         },
         # result_tracker='mlflow',
@@ -38,8 +42,8 @@ def train_ComplEx2(dataset):
         #     tracking_uri='http://127.0.0.1:5000',
         #     experiment_name='ComplEx training on FB237',
         # ),
-        # stopper='early',
-        # stopper_kwargs={"patience": 10},
+        stopper='early',
+        stopper_kwargs={"patience": 10},
         evaluator_kwargs={"filtered": True}
     )
     return pipeline_result
@@ -50,7 +54,7 @@ def train_ComplEx(dataset):
         dataset=dataset,
         model="ComplEx",
         model_kwargs=dict(embedding_dim=200, entity_initializer="xavier_uniform",
-                          relation_initializer="xavier_uniform"),
+                          relation_initializer="xavier_uniform", predict_with_sigmoid=True),
         loss=CrossEntropyLoss,
         loss_kwargs={"reduction": "mean"},
         regularizer=LpRegularizer,
@@ -65,6 +69,7 @@ def train_ComplEx(dataset):
         negative_sampler_kwargs={"num_negs_per_pos": 10},
         training_kwargs={
             "num_epochs": 1000,
+            # "num_epochs": 10,
             "batch_size": 1024
         },
         # result_tracker='mlflow',
@@ -72,8 +77,8 @@ def train_ComplEx(dataset):
         #     tracking_uri='http://127.0.0.1:5000',
         #     experiment_name='ComplEx training on FB237',
         # ),
-        # stopper='early',
-        # stopper_kwargs={"patience": 10},
+        stopper='early',
+        stopper_kwargs={"patience": 10},
         evaluator_kwargs={"filtered": True}
     )
     return pipeline_result
@@ -112,8 +117,8 @@ def train_TuckER(dataset):
         #     tracking_uri='http://127.0.0.1:5000',
         #     experiment_name='TuckER training on FB237',
         # ),
-        # stopper='early',
-        # stopper_kwargs={"patience": 10}
+        stopper='early',
+        stopper_kwargs={"patience": 10}
     )
     return pipeline_result
 
@@ -150,8 +155,8 @@ def train_RotatE(dataset):
         evaluator_kwargs={
             "filtered": True
         },
-        # stopper='early',
-        # stopper_kwargs={"patience": 10},
+        stopper='early',
+        stopper_kwargs={"patience": 10},
         # result_tracker='mlflow',
         # result_tracker_kwargs=dict(
         #     tracking_uri='http://127.0.0.1:5000',
@@ -170,7 +175,12 @@ def train_NodePiece(dataset):
     return pipeline_results
 
 
-def train_multi_models(dataset, model_list, work_dir):
+def train_multi_models(params):
+    dataset = get_dataset(
+        dataset=params['dataset']
+    )
+    model_list = params['models']
+    work_dir = params['work_dir']
     for m in model_list:
         func_name = 'train_' + m
         pipeline_result = globals()[func_name](dataset)
@@ -178,7 +188,13 @@ def train_multi_models(dataset, model_list, work_dir):
 
 
 if __name__ == '__main__':
-    # train_multi_models(dataset=ds.Nations(), work_dir="outputs/nations/")
-    # train_multi_models(dataset=ds.FB15k237(), model_list=['ComplEx', 'TuckER', 'RotatE'], work_dir="outputs/fb237/")
+    parser = argparse.ArgumentParser(description="experiment settings")
+    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
+    parser.add_argument('--dataset', type=str, default="UMLS")
+    parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    args = parser.parse_args()
+    param1 = args.__dict__
+    param1.update({"models": args.models.split('_')})
+    train_multi_models(param1)
     # train_NodePiece('fb15k237')
-    train_multi_models('fb15k237', ['NodePiece'], work_dir="outputs/fb237/")
+    # train_multi_models('fb15k237', ['NodePiece'], work_dir="outputs/fb237/")

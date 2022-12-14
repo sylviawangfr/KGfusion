@@ -1,11 +1,10 @@
-import random
-
-from pykeen.typing import MappedTriples
 from torch.utils.data import Dataset
-import torch
 from abc import ABC, abstractmethod
-
-from common_utils import chart_input
+import random
+import pandas as pd
+from pykeen.typing import MappedTriples
+import torch
+from collections import Counter
 
 
 class FusionDataset(Dataset, ABC):
@@ -83,3 +82,47 @@ def padding_sampling(x, expected_len):
         for i in range(expected_len - len(x)):
             x.extend(random.sample(x, 1))
     return x
+
+
+def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
+    selected_scores = []
+    neg_scores = torch.stack(neg_score_ht, 0)
+    neg_scores = torch.chunk(neg_scores, 2, 2)  # (h, t) tuple
+    neg_index = torch.stack(neg_index_topk, 0)
+    neg_index = torch.chunk(neg_index, 2, 2)
+    #   [e1,h,e3,..],r,t
+    #   h,r,[t,e2,...]
+    #   The neg examples contain prediction scores and head/tail eval scores
+    # we count the most frequent top_k examples from head and tail preds
+    for target in range(2):
+        # restore model scores and index to orginal indexed tensor in shape of [num_model, num_triples, num_candidates + 1]
+        # this is an important step to gather scores from multi-models.
+        topk_idx = neg_index[target].squeeze()
+        max_index = torch.max(topk_idx)  # number of original candidates
+        tmp_scores = neg_scores[target].squeeze()
+        tmp_topk = torch.clone(topk_idx)
+        # add one extra column to handle the -999.0/-1 mask values. the masked values are not selected anyway.
+        tmp_topk[tmp_topk == -1] = max_index + 1
+        scattered_scores = torch.zeros([tmp_topk.shape[0], tmp_topk.shape[1], max_index + 2]).scatter_(2, tmp_topk, tmp_scores) # sigmoid scores [0-1]
+        # target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
+        target_neg_scores = scattered_scores.transpose(0, 1).transpose(1, 2)
+        # count top_k frequent index
+        backup_shape = topk_idx.shape
+        topk_idx = topk_idx.transpose(0, 1).reshape([backup_shape[1], backup_shape[0]*backup_shape[2]])
+        idx_df = pd.DataFrame(data=topk_idx.numpy().T)
+        idx_df = idx_df.groupby(idx_df.columns, axis=1).apply(lambda x: x.values).apply(lambda y:y.flatten())
+        idx_df = idx_df.apply(lambda x: x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(num_neg)])
+        # for rows that less than num_neg, we randomly duplicate existing index
+        idx_df = idx_df.apply(lambda x: padding_sampling(x, num_neg))
+        tmp_topk_idx = list(idx_df.values)
+        fill_topk = torch.as_tensor(tmp_topk_idx)
+        target_neg_scores = target_neg_scores[torch.arange(0, target_neg_scores.shape[0]).unsqueeze(1), fill_topk]
+        selected_scores.append(target_neg_scores)
+
+    scores_repeat = torch.cat(selected_scores, 1)
+    # random select from  top_k * times
+    sample_weight = torch.ones(scores_repeat.shape[0], scores_repeat.shape[1])
+    sample_index = torch.multinomial(sample_weight, num_neg)
+    scores_repeat = scores_repeat[torch.arange(0, scores_repeat.shape[0]).unsqueeze(1), sample_index]
+    selected_feature = scores_repeat.reshape(scores_repeat.shape[0] * scores_repeat.shape[1], scores_repeat.shape[2])
+    return selected_feature
