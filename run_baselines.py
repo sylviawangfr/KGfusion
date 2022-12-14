@@ -13,6 +13,8 @@ import logging
 # logging.basicConfig(level=logging.DEBUG)
 from pykeen.utils import normalize_path, load_configuration
 
+from common_utils import init_dir
+
 
 def train_ComplEx2(dataset):
     pipeline_result = pipeline(
@@ -181,6 +183,7 @@ def train_multi_models(params):
     )
     model_list = params['models']
     work_dir = params['work_dir']
+    init_dir(work_dir)
     for m in model_list:
         func_name = 'train_' + m
         pipeline_result = globals()[func_name](dataset)
