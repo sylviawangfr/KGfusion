@@ -44,7 +44,7 @@ class WeightedAverageBlender:
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        save_to_file(str_re, work_dir + "w_avg.log")
+        save_to_file(str_re, work_dir + '_'.join(self.params['models']) + "_w_avg.log")
         print(str_re)
         return result
 

@@ -231,11 +231,6 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
             relation_filter=relation_filter,
         )
     result = evaluator.finalize()
-    str_re = format_result(result)
-    save_to_file(str_re, para['work_dir'] + "nn.log")
-    print(str_re)
-    if para['mlflow']:
-        mlflow.log_param('result', str_re)
     return result
 
 
@@ -252,8 +247,8 @@ class NNLinearBlender:
             if not exp:
                 mlflow.create_experiment("KGFusion")
             mlflow.set_experiment("KGFusion")
-            for k in para:
-                log_param(k, para[k])
+            for k in self.params:
+                log_param(k, self.params[k])
         # 1. load individual model context
         work_dir = self.params['work_dir']
         context = load_score_context(para['models'], in_dir=work_dir)
@@ -261,9 +256,12 @@ class NNLinearBlender:
         all_pos = get_all_pos_triples(self.dataset)
         mo = train_aggregation_model(self.dataset.validation.mapped_triples, context, all_pos, self.params)
         # 3. aggregate scores for testing
-        re = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
-        print(json.dumps(re.to_dict(), indent=2))
-        json.dump(re.to_dict(), open(work_dir + "blended.json", "w"), indent=2)
+        result = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
+        str_re = format_result(result)
+        save_to_file(str_re, self.params['work_dir'] + '_'.join(self.params['models']) + "_nn.log")
+        print(str_re)
+        if self.params['mlflow']:
+            mlflow.log_param('result', str_re)
 
 
 if __name__ == '__main__':

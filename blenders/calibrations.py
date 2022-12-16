@@ -57,7 +57,7 @@ class PlattScalingBlender:
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        save_to_file(str_re, work_dir + "cali.log")
+        save_to_file(str_re, work_dir + '_'.join(self.params['models']) + "_cali.log")
         print(str_re)
         return result
 
