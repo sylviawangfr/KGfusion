@@ -1,14 +1,15 @@
 import argparse
+from pathlib import Path
 
+import torch
 import pykeen.datasets as ds
 from pykeen.datasets import ConceptNet, UMLS, get_dataset
-from pykeen.losses import CrossEntropyLoss
-from pykeen.models import ComplEx, TuckER
+from pykeen.losses import CrossEntropyLoss, BCEWithLogitsLoss
+from pykeen.models import ComplEx, TuckER, NodePiece
 from pykeen.pipeline import pipeline, replicate_pipeline_from_config, pipeline_from_config
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.regularizers import LpRegularizer
 import logging
-
 
 # logging.basicConfig(level=logging.DEBUG)
 from pykeen.utils import normalize_path, load_configuration
@@ -172,15 +173,83 @@ def train_NodePiece(dataset):
     # extra_kwargs = dict(move_to_cpu=False,
     #                     save_replicates=False,
     #                     save_training=False)
-    path = normalize_path("galkin2022_nodepiece_{}.yaml".format(dataset))
+    path = normalize_path("galkin2022_nodepiece_fb15k237.yaml")
     pipeline_results = pipeline_from_config(config=load_configuration(path))
     return pipeline_results
 
 
-def train_multi_models(params):
-    dataset = get_dataset(
-        dataset=params['dataset']
+class DeepSet(torch.nn.Module):
+    def __init__(self, hidden_dim=64):
+        super().__init__()
+        self.encoder = torch.nn.Sequential(
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+        )
+        self.decoder = torch.nn.Sequential(
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden_dim, hidden_dim),
+        )
+
+    def forward(self, x, dim=-2):
+        x = self.encoder(x).mean(dim)
+        x = self.decoder(x)
+        return x
+
+
+def train_NodePiece2(dataset):
+    result = pipeline(
+        dataset=dataset,
+        dataset_kwargs=dict(
+            create_inverse_triples=True,
+        ),
+        model=NodePiece,
+        model_kwargs=dict(
+            tokenizers=["AnchorTokenizer", "RelationTokenizer"],
+            num_tokens=[20, 12],
+            tokenizers_kwargs=[
+                dict(
+                    selection="MixtureAnchorSelection",
+                    selection_kwargs=dict(
+                        selections=["degree", "pagerank", "random"],
+                        ratios=[0.4, 0.4, 0.2],
+                        num_anchors=500,
+                    ),
+                    searcher="ScipySparse",
+                ),
+                dict(),  # empty dict for the RelationTokenizer - it doesn't need any kwargs
+            ],
+            embedding_dim=64,
+            interaction="rotate",
+            relation_initializer="init_phases",
+            relation_constrainer="complex_normalize",
+            entity_initializer="xavier_uniform_",
+            aggregation=DeepSet(hidden_dim=64),
+        ),
+        loss=BCEWithLogitsLoss,
+        loss_kwargs=dict(reduction='mean'),
+        optimizer="Adam",
+        optimizer_kwargs=dict(
+            lr=0.0005),
+        training_kwargs=dict(
+                batch_size=512,
+                num_epochs=401,
+                label_smoothing=0.4),
+        training_loop='LCWA'
     )
+    return result
+
+
+def train_multi_models(params):
+    # dataset = get_dataset(
+    #     dataset=params['dataset']
+    # )
+    dataset = params['dataset']
     model_list = params['models']
     work_dir = params['work_dir']
     init_dir(work_dir)
@@ -188,16 +257,21 @@ def train_multi_models(params):
         func_name = 'train_' + m
         pipeline_result = globals()[func_name](dataset)
         pipeline_result.save_to_directory(work_dir + m + "/checkpoint/", save_metadata=True)
+        if 'NodePiece' in m:
+            pipeline_result.entity_representations[0].base[0].save_assignment(
+                Path(work_dir + m + "/checkpoint/anchors_assignment.pt"))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
+    # parser.add_argument('--models', type=str, default="NodePiece")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
     train_multi_models(param1)
-    # train_NodePiece('fb15k237')
+    # train_NodePiece('fb15k23')
+    # train_NodePiece('UMLS')
     # train_multi_models('fb15k237', ['NodePiece'], work_dir="outputs/fb237/")

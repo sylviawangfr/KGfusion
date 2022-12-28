@@ -2,16 +2,16 @@ import pandas as pd
 from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_scores_
 from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
 import torch
-from collections import Counter
-from features.FusionDataset import FusionDataset, padding_sampling, get_multi_model_neg_topk
+from features.FusionDataset import FusionDataset, get_multi_model_neg_topk
 
 
 class PerRelNoSignalDataset(FusionDataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
-    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
+    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, eval_feature=0, num_neg=4):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
         self.dim = len(context_resource['models']) * 2
+        self.eval_feature = eval_feature
 
     def _get_neg_scores_for_training(self, dev_predictions, times=4):
         # Create filter
@@ -39,9 +39,9 @@ class PerRelNoSignalDataset(FusionDataset):
             neg_index.append(indices_k)
         return neg_scores, neg_index
 
-    def _get_rel_eval_scores(self, model_rel_eval):
+    def _get_rel_eval_scores(self, model_rel_eval, rel2idx):
         rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
-        rel_idx = rel_mapped.applymap(lambda x: self.releval2idx[x] if x in self.releval2idx else -1)
+        rel_idx = rel_mapped.applymap(lambda x: rel2idx[x] if x in rel2idx else -1)
         rel_h_t_eval = model_rel_eval[rel_idx.to_numpy().T]
         return rel_h_t_eval
 
@@ -51,6 +51,12 @@ class PerRelNoSignalDataset(FusionDataset):
         scores_pos = []
         both_eval = []
         neg_index_topk_times = []
+        if self.eval_feature == 0:
+            rel2idx = self.context_resource['releval2idx']
+            rel_eval = 'rel_eval'
+        else:
+            rel2idx = self.context_resource['relmapping2idx']
+            rel_eval = 'mapping_eval'
         for m in self.context_resource['models']:
             m_context = self.context_resource[m]
             # get pos scores
@@ -62,7 +68,7 @@ class PerRelNoSignalDataset(FusionDataset):
             scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
             neg_index_topk_times.append(m_neg_index_topk4)
             # model eval hit@N
-            m_hrb_eval = self._get_rel_eval_scores(m_context['rel_eval'])
+            m_hrb_eval = self._get_rel_eval_scores(m_context[rel_eval], rel2idx)
             m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_hrb_eval, 3, 1)
             both_eval.append(m_b_eval)
         # # pos feature [m1_eval, m2_eva., ... m1_s1,m2_s1,....]
@@ -83,13 +89,19 @@ class PerRelNoSignalDataset(FusionDataset):
         tail_scores = []
         both_eval = []
         num_models = len(self.context_resource['models'])
+        if self.eval_feature == 0:
+            rel2idx = self.context_resource['releval2idx']
+            rel_eval = 'rel_eval'
+        else:
+            rel2idx = self.context_resource['relmapping2idx']
+            rel_eval = 'mapping_eval'
         for m in self.context_resource['models']:
             m_context = self.context_resource[m]
             m_preds = m_context['preds']
             m_h_preds, m_t_preds = torch.chunk(m_preds, 2, 1)
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))
             tail_scores.append(torch.flatten(m_t_preds, start_dim=0, end_dim=1))
-            m_rel_h_t_eval = self._get_rel_eval_scores(m_context['rel_eval'])
+            m_rel_h_t_eval = self._get_rel_eval_scores(m_context[rel_eval], rel2idx)
             m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_rel_h_t_eval, 3, 1)
             both_eval.append(m_b_eval)
 

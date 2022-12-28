@@ -14,6 +14,7 @@ class FusionDataset(Dataset, ABC):
         self.triple_index = list(range(mapped_triples.shape[0]))
         self.context_resource = context_resource
         self.releval2idx = context_resource['releval2idx']
+        self.relmapping2idx = context_resource['relmapping2idx']
         self.all_pos_triples = all_pos_triples
         self.num_neg = num_neg
         self._train_pos = None

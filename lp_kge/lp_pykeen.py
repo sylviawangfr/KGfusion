@@ -1,3 +1,5 @@
+import gc
+
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.evaluation.evaluator import optional_context_manager, create_sparse_positive_filter_, filter_scores_
 from pykeen.models import Model
@@ -18,7 +20,6 @@ from pykeen.typing import MappedTriples
 from pykeen.utils import resolve_device
 from utils import save2json
 from pykeen.utils import prepare_filter_triples
-
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,21 @@ def predict_head_tail_scores(
     return model_sample_results.detach().cpu()
 
 
+def per_group_rank_evaluate(model: Model,
+                            mapped_triples,
+                            batch_size: Optional[int] = None,
+                            slice_size: Optional[int] = None,
+                            **kwargs,
+                            ):
+    evaluator = RankBasedEvaluator()
+    metrix_result_g = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
+    tmp_eval = metrix_result_g.data
+    head_tail_mrr = [tmp_eval[('hits_at_10', 'head', 'realistic')],
+                          tmp_eval[('hits_at_10', 'tail', 'realistic')],
+                          tmp_eval[('hits_at_10', 'both', 'realistic')]]
+    return head_tail_mrr
+
+
 def per_rel_rank_evaluate(model: Model,
                           mapped_triples_groups,
                           ordered_keys,
@@ -175,18 +191,54 @@ def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k
         indices_k[nan_index[:, 0], nan_index[:, 1]] = int(-1)
         neg_scores.append(scores_k)
         neg_index.append(indices_k)
-    neg_scores = torch.stack(neg_scores, 1) # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
+    neg_scores = torch.stack(neg_scores, 1)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
     neg_index = torch.stack(neg_index, 1)
     return neg_scores, neg_index
 
 
+def find_relation_mappings(dataset: pykeen.datasets.Dataset):
+    all_triples = torch.cat([dataset.training.mapped_triples,
+                             dataset.validation.mapped_triples,
+                             dataset.testing.mapped_triples], 0)
+    df = pd.DataFrame(data=all_triples.numpy(), columns=['h', 'r', 't'])
+    del all_triples
+    hr = df[['h', 'r']]
+    possible_one_to_many_rel = hr[hr.duplicated()][['r']].drop_duplicates(keep='first')
+    tmp_r1 = hr[['r']].drop_duplicates(keep='first')
+    possible_one2one_1 = pd.concat([tmp_r1, possible_one_to_many_rel]).drop_duplicates(keep=False)
+    rt = df[['r', 't']]
+    del df
+    possible_many_to_one_rel = rt[rt.duplicated()][['r']].drop_duplicates(keep='first')
+    tmp_r2 = rt[['r']].drop_duplicates(keep='first')
+    possible_one2one_2 = pd.concat([tmp_r2, possible_many_to_one_rel]).drop_duplicates(keep=False)
+    many_to_many_rel = pd.concat([possible_one_to_many_rel, possible_many_to_one_rel])
+    many_to_many_rel = many_to_many_rel[many_to_many_rel.duplicated()]
+    one_to_one_rel = pd.concat([possible_one2one_1, possible_one2one_2])
+    one_to_one_rel = one_to_one_rel[one_to_one_rel.duplicated()]
+    one_to_many_rel = pd.concat([possible_one_to_many_rel, many_to_many_rel]).drop_duplicates(keep=False)
+    many_to_one_rel = pd.concat([possible_many_to_one_rel, many_to_many_rel]).drop_duplicates(keep=False)
+    all_count = len(one_to_one_rel.index) + \
+                len(one_to_many_rel.index) + \
+                len(many_to_one_rel.index) + \
+                len(many_to_many_rel.index)
+    assert(all_count == dataset.num_relations)
+    rel_groups = {'one_to_one': one_to_one_rel['r'].values,
+                  'one_to_many': one_to_many_rel['r'].values,
+                  'many_to_one': many_to_one_rel['r'].values,
+                  'many_to_many': many_to_many_rel['r'].values}
+    del hr
+    del rt
+    gc.collect()
+    return rel_groups
+
+
 class LpKGE:
-    def __init__(self, dataset, models, work_dir):
+    def __init__(self, dataset: pykeen.datasets.Dataset, models, work_dir):
         self.dataset = dataset
         self.models = models
         self.work_dir = work_dir
 
-    def dev_eval(self):
+    def dev_rel_eval(self):
         mapped_triples_eval = self.dataset.validation.mapped_triples
         triples_df = pd.DataFrame(data=mapped_triples_eval.numpy(), columns=['h', 'r', 't'])
         groups = triples_df.groupby('r', group_keys=True, as_index=False)
@@ -204,6 +256,36 @@ class LpKGE:
             torch.save(per_rel_eval.detach().cpu(), m_out_dir + "rel_eval.pt")
         save2json(releval2idx, self.work_dir + "releval2idx.json")
 
+    def dev_mapping_eval(self):
+        mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
+        rel_mappings = find_relation_mappings(self.dataset)
+        dev = self.dataset.validation.mapped_triples
+        triples_df = pd.DataFrame(data=dev.numpy(), columns=['h', 'r', 't'])
+        relmapping2idx = dict()
+        for idx, mapping_type in enumerate(mappings):
+            mapped_rels = rel_mappings[mapping_type]
+            relmapping2idx.update({int(rel): idx for rel in mapped_rels})
+        device: torch.device = resolve_device()
+        logger.info(f"Using device: {device}")
+        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training)}
+        for m in self.models:
+            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
+            m_out_dir = self.work_dir + m + "/"
+            single_model = torch.load(m_dir)
+            single_model = single_model.to(device)
+            model_eval = []
+            for rel_group in mappings:
+                tmp_rels = rel_mappings[rel_group]
+                tri_group = triples_df.query('r in @tmp_rels')
+                if len(tri_group.index) > 0:
+                    mapped_group = torch.from_numpy(tri_group.values)
+                    group_eval = per_group_rank_evaluate(single_model, mapped_group, **evaluation_kwargs)
+                    model_eval.append(group_eval)
+                else:
+                    model_eval.append([0.5, 0.5, 0.5])
+            torch.save(torch.Tensor(model_eval), m_out_dir + "mapping_eval.pt")
+        save2json(relmapping2idx, self.work_dir + "relmapping2idx.json")
+
     def dev_pred(self, top_k):
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
@@ -214,12 +296,15 @@ class LpKGE:
             single_model = torch.load(m_dir)
             single_model = single_model.to(device)
             # pykeen KGE dev prediction scores, ordered by scores. we need both pos scores and neg scores, and there index
-            eval_preds = predict_head_tail_scores(single_model, self.dataset.validation.mapped_triples, mode=None) # head_preds + t_preds
+            eval_preds = predict_head_tail_scores(single_model, self.dataset.validation.mapped_triples,
+                                                  mode=None)  # head_preds + t_preds
             m_dev_preds = torch.chunk(eval_preds, 2, 1)
             pos_scores = m_dev_preds[0]
             pos_scores = pos_scores[torch.arange(0, self.dataset.validation.mapped_triples.shape[0]),
                                     self.dataset.validation.mapped_triples[:, 0]]
-            neg_scores, neg_index_topk = get_neg_scores_top_k(self.dataset.validation.mapped_triples, m_dev_preds, all_pos_triples, top_k) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
+            neg_scores, neg_index_topk = get_neg_scores_top_k(self.dataset.validation.mapped_triples, m_dev_preds,
+                                                              all_pos_triples,
+                                                              top_k)  # [[h1 * candidate, h2 * candicate...][t1,t2...]]
             torch.save(pos_scores, m_out_dir + "eval_pos_scores.pt")
             torch.save(neg_scores, m_out_dir + "eval_neg_scores.pt")
             torch.save(neg_index_topk, m_out_dir + "eval_neg_index.pt")
@@ -248,6 +333,8 @@ if __name__ == '__main__':
     d = UMLS()
     dirtmp = '../outputs/umls/'
     pykeen_lp = LpKGE(dataset=d, models=['ComplEx', 'TuckER'], work_dir=dirtmp)
-    pykeen_lp.dev_pred(top_k=100)
-    pykeen_lp.dev_eval()
-    pykeen_lp.test_pred()
+    pykeen_lp.dev_mapping_eval()
+    # pykeen_lp.dev_pred(top_k=100)
+    # pykeen_lp.dev_rel_eval()
+    # pykeen_lp.test_pred()
+    # find_relation_mappings(d)

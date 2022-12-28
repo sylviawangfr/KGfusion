@@ -22,7 +22,7 @@ class WeightedAverageBlender:
         context = load_score_context(self.params['models'], in_dir=work_dir)
         mapped_triples = self.dataset.testing.mapped_triples
         all_pos = get_all_pos_triples(self.dataset)
-        test_data_feature = PerRelNoSignalDataset(mapped_triples, context, all_pos)
+        test_data_feature = PerRelNoSignalDataset(mapped_triples, context, all_pos, eval_feature=self.params['eval_feature'])
         eval_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 2, 1)
         eval_mul_score = torch.sum(torch.mul(eval_feature, score_feature), 1)
         tmp_evl_sum = torch.sum(eval_feature, 1)
@@ -54,6 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    parser.add_argument('--eval_feature', type=int, default=0)
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
