@@ -1,5 +1,5 @@
+import argparse
 import gc
-
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.evaluation.evaluator import optional_context_manager, create_sparse_positive_filter_, filter_scores_
 from pykeen.models import Model
@@ -12,7 +12,7 @@ import numpy as np
 from tqdm.autonotebook import tqdm
 import logging
 from typing import List
-from pykeen.datasets import FB15k237, Nations, UMLS
+from pykeen.datasets import FB15k237, Nations, UMLS, get_dataset
 import pykeen
 import torch
 import pandas as pd
@@ -233,8 +233,8 @@ def find_relation_mappings(dataset: pykeen.datasets.Dataset):
 
 
 class LpKGE:
-    def __init__(self, dataset: pykeen.datasets.Dataset, models, work_dir):
-        self.dataset = dataset
+    def __init__(self, dataset, models, work_dir):
+        self.dataset = get_dataset(dataset=dataset)
         self.models = models
         self.work_dir = work_dir
 
@@ -282,7 +282,7 @@ class LpKGE:
                     group_eval = per_group_rank_evaluate(single_model, mapped_group, **evaluation_kwargs)
                     model_eval.append(group_eval)
                 else:
-                    model_eval.append([0.5, 0.5, 0.5])
+                    model_eval.append([0.01, 0.01, 0.01])
             torch.save(torch.Tensor(model_eval), m_out_dir + "mapping_eval.pt")
         save2json(relmapping2idx, self.work_dir + "relmapping2idx.json")
 
@@ -326,13 +326,15 @@ class LpKGE:
 
 
 if __name__ == '__main__':
-    # d = Nations()
-    # dirtmp = 'outputs/nations/'
-    # d = FB15k237()
-    # dirtmp = 'outputs/fb237/'
-    d = UMLS()
-    dirtmp = '../outputs/umls/'
-    pykeen_lp = LpKGE(dataset=d, models=['ComplEx', 'TuckER'], work_dir=dirtmp)
+    parser = argparse.ArgumentParser(description="experiment settings")
+    parser.add_argument('--models', type=str, default="ComplEx_TuckER")
+    # parser.add_argument('--models', type=str, default="NodePiece")
+    parser.add_argument('--dataset', type=str, default="UMLS")
+    parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    args = parser.parse_args()
+    param1 = args.__dict__
+    param1.update({"models": args.models.split('_')})
+    pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     pykeen_lp.dev_mapping_eval()
     # pykeen_lp.dev_pred(top_k=100)
     # pykeen_lp.dev_rel_eval()

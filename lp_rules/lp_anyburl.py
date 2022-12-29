@@ -1,17 +1,18 @@
+import argparse
 import os
 import os.path as osp
 from itertools import zip_longest
 import pykeen.datasets
 import torch
 import pandas as pd
-from pykeen.datasets import FB15k237, UMLS
+from pykeen.datasets import FB15k237, UMLS, get_dataset
 
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir
-from lp_kge.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples
+from lp_kge.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples, find_relation_mappings
 
 
-def read_hrt_pred_anyburl(anyburl_dir, top_k=10):
-    with open(anyburl_dir + "predictions/alpha-100") as f:
+def read_hrt_pred_anyburl(anyburl_dir, snapshot=100, top_k=10):
+    with open(anyburl_dir + f"predictions/alpha-{snapshot}") as f:
         lines = f.readlines()
         chunks = zip_longest(*[iter(lines)] * 3, fillvalue='')
         h_preds = []
@@ -103,6 +104,33 @@ def per_rel_eval(mapped_triples, file_triples: [], pred_index, out_dir):
     torch.save(head_tail_mrr, out_dir + "rel_eval.pt")
 
 
+def per_mapping_eval(dataset, file_triples: [], pred_index, out_dir):
+    mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
+    rel_mappings = find_relation_mappings(dataset)
+    tri_df = pd.DataFrame(data=file_triples, columns=['h', 'r', 't'])
+    head_tail_mrr = []
+    for rel_group in mappings:
+        tmp_rels = rel_mappings[rel_group]
+        rg_tris = tri_df.query('r in @tmp_rels')
+        if len(rg_tris.index) > 0:
+            rg_index = torch.as_tensor(rg_tris.index)
+            h_preds, t_preds = pred_index[rg_index].chunk(2, 1)
+            h_preds = h_preds.squeeze(1)
+            t_preds = t_preds.squeeze(1)
+            heads = torch.as_tensor(rg_tris['h'].values).unsqueeze(1)
+            tails = torch.as_tensor(rg_tris['t'].values).unsqueeze(1)
+            head_hits = calc_hit_at_10(h_preds, heads)
+            tail_hits = calc_hit_at_10(t_preds, tails)
+            both_hit = calc_hit_at_10(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+            head_tail_mrr.append([head_hits,
+                                  tail_hits,
+                                  both_hit])
+        else:
+            head_tail_mrr.append([0.01, 0.01, 0.01])
+    head_tail_mrr = torch.Tensor(head_tail_mrr)
+    torch.save(head_tail_mrr, out_dir + "mapping_eval.pt")
+
+
 def calc_hit_at_10(pred_idx, ground_truth_idx):
     """Calculates mean number of hits@k. Higher values are ranked first.
     Returns: list of float, of the same length as hit_positions, containing
@@ -111,25 +139,6 @@ def calc_hit_at_10(pred_idx, ground_truth_idx):
     idx_at_10 = pred_idx[:, :10]
     hits_at_10 = (idx_at_10 == ground_truth_idx).sum(dim=1).float().mean()
     return hits_at_10.item()
-
-
-# def dev_pred(dataset: pykeen.datasets.Dataset, anyburl_dir, top_k=10):
-#     mapped_triples_2_anyburl_hrt_dev(dataset, anyburl_dir)
-#     prepare_anyburl_configs(anyburl_dir)
-#     learn_anyburl(anyburl_dir)
-#     predict_with_anyburl(anyburl_dir)
-#     file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, top_k=top_k)
-#     all_pos_triples = get_all_pos_triples(dataset)
-#     to_fusion_eval_format(dataset, file_triples, pred_index, pred_scores, all_pos_triples, anyburl_dir, top_k)
-#     per_rel_eval(dataset.validation.mapped_triples, file_triples, pred_index, anyburl_dir)
-
-#
-# def test_pred(dataset, anyburl_dir, top_k=10):
-#     clean_anyburl_tmp_files(anyburl_dir)
-#     mapped_test_2_anyburl_hrt_test(dataset, anyburl_dir)
-#     predict_with_anyburl(anyburl_dir)
-#     file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, top_k=top_k)
-#     to_fusion_test_format(dataset, file_triples, pred_index, pred_scores, anyburl_dir)
 
 
 def get_certain_index_in_tensor(src_tensor, target):
@@ -160,22 +169,22 @@ def mapped_test_2_anyburl_hrt_test(dataset: pykeen.datasets.Dataset, anyburl_dir
     wait_until_anyburl_data_ready(anyburl_dir)
 
 
-def prepare_anyburl_configs(anyburl_dir, top_k=10):
+def prepare_anyburl_configs(anyburl_dir, snapshot=100, top_k=10):
     config_apply = f"PATH_TRAINING  = {anyburl_dir}train.txt\n" \
                    f"PATH_TEST      = {anyburl_dir}test.txt\n" \
                    f"PATH_VALID     = {anyburl_dir}valid.txt\n" \
-                   f"PATH_RULES     = {anyburl_dir}rules/alpha-100\n" \
-                   f"PATH_OUTPUT    = {anyburl_dir}predictions/alpha-100\n" \
+                   f"PATH_RULES     = {anyburl_dir}rules/alpha-{snapshot}\n" \
+                   f"PATH_OUTPUT    = {anyburl_dir}predictions/alpha-{snapshot}\n" \
                    "UNSEEN_NEGATIVE_EXAMPLES = 5\n" \
                    f"TOP_K_OUTPUT = {top_k}\n" \
                    "WORKER_THREADS = 7"
     config_eval = f"PATH_TRAINING  = {anyburl_dir}train.txt\n" \
                   f"PATH_TEST      = {anyburl_dir}test.txt\n" \
                   f"PATH_VALID     = {anyburl_dir}valid.txt\n" \
-                  f"PATH_PREDICTIONS   = {anyburl_dir}predictions/alpha-100"
+                  f"PATH_PREDICTIONS   = {anyburl_dir}predictions/alpha-{snapshot}"
     config_learn = f"PATH_TRAINING  = {anyburl_dir}train.txt\n" \
                    f"PATH_OUTPUT    = {anyburl_dir}rules/alpha\n" \
-                   f"SNAPSHOTS_AT = 100\n" \
+                   f"SNAPSHOTS_AT = {snapshot}\n" \
                    f"WORKER_THREADS = 4\n"
     save_to_file(config_apply, anyburl_dir + "config-apply.properties")
     save_to_file(config_eval, anyburl_dir + "config-eval.properties")
@@ -196,17 +205,17 @@ def wait_until_anyburl_data_ready(anyburl_dir):
         wait_until_file_is_saved(anyburl_dir + "{}.txt".format(f))
 
 
-def learn_anyburl(work_dir):
+def learn_anyburl(work_dir, snapshot=100):
     if work_dir[-1] == '/':
         work_dir = work_dir[:-1]
     os.system('./run_anyburl.sh ' + work_dir)
-    wait_until_file_is_saved(work_dir + "/rules/alpha-100", 60)
+    wait_until_file_is_saved(work_dir + f"/rules/alpha-{snapshot}", 60)
 
 
-def predict_with_anyburl(work_dir):
+def predict_with_anyburl(work_dir, snapshot=100):
     print("Predicting via AnyBURL...")
     os.system(f"java -Xmx10G -cp {work_dir}AnyBURL-JUNO.jar de.unima.ki.anyburl.Apply {work_dir}config-apply.properties")
-    wait_until_file_is_saved(work_dir + "predictions/alpha-100_plog", 60)
+    wait_until_file_is_saved(work_dir + f"predictions/alpha-{snapshot}_plog", 60)
     print("Evaluating AnyBURL...")
     os.system(f"java -Xmx10G -cp {work_dir}AnyBURL-JUNO.jar de.unima.ki.anyburl.Eval {work_dir}config-eval.properties > {work_dir}anyburl_eval.log")
 
@@ -219,36 +228,38 @@ def clean_anyburl(work_dir):
 
 class LpAnyBURL:
     def __init__(self, dataset, work_dir):
-        self.dataset = dataset
+        self.dataset = get_dataset(dataset=dataset)
         self.work_dir = work_dir
 
-    def dev_pred(self, top_k):
+    def dev_pred(self, snapshot, top_k):
         mapped_triples_2_anyburl_hrt_dev(self.dataset, self.work_dir)
-        prepare_anyburl_configs(self.work_dir)
-        learn_anyburl(self.work_dir)
-        predict_with_anyburl(self.work_dir)
-        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, top_k=top_k)
+        prepare_anyburl_configs(self.work_dir, snapshot=snapshot, top_k=top_k)
+        learn_anyburl(self.work_dir, snapshot=snapshot)
+        predict_with_anyburl(self.work_dir, snapshot=snapshot)
+        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, snapshot=snapshot, top_k=top_k)
         all_pos_triples = get_all_pos_triples(self.dataset)
         to_fusion_eval_format(self.dataset, file_triples, pred_index, pred_scores, all_pos_triples, self.work_dir, top_k)
         per_rel_eval(self.dataset.validation.mapped_triples, file_triples, pred_index, self.work_dir)
+        per_mapping_eval(dataset=self.dataset, file_triples=file_triples, pred_index=pred_index, out_dir=self.work_dir)
 
-    def test_pred(self, top_k):
+    def test_pred(self, snapshot, top_k):
         clean_anyburl_tmp_files(self.work_dir)
-        mapped_test_2_anyburl_hrt_test(self.work_dir, self.work_dir)
-        predict_with_anyburl(self.work_dir)
-        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, top_k=top_k)
+        mapped_test_2_anyburl_hrt_test(self.dataset, self.work_dir)
+        predict_with_anyburl(self.work_dir, snapshot=snapshot)
+        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, snapshot=snapshot, top_k=top_k)
         to_fusion_test_format(self.dataset, file_triples, pred_index, pred_scores, self.work_dir)
 
 
+
 if __name__ == "__main__":
-    # dev_pred(Nations(), '../outputs/nations/anyburl/', top_k=10)
-    # test_pred(Nations(), '../outputs/nations/anyburl/', top_k=10)
-    # d = FB15k237()
-    # wd = '../outputs/fb237/anyburl/'
-    d = UMLS()
-    dirtmp = '../outputs/umls/anyburl/'
-    topk=100
-    lp = LpAnyBURL(d, dirtmp)
-    lp.dev_pred(topk)
-    lp.test_pred(topk)
+    parser = argparse.ArgumentParser(description="experiment settings")
+    parser.add_argument('--dataset', type=str, default="UMLS")
+    parser.add_argument('--snapshot', type=int, default=1000)
+    parser.add_argument('--top_k', type=int, default=100)
+    parser.add_argument('--work_dir', type=str, default="../outputs/umls/anyburl/")
+    args = parser.parse_args()
+    param1 = args.__dict__
+    lp = LpAnyBURL(param1['dataset'], param1['work_dir'])
+    lp.dev_pred(snapshot=param1['snapshot'], top_k=param1['top_k'])
+    lp.test_pred(snapshot=param1['snapshot'], top_k=param1['top_k'])
 
