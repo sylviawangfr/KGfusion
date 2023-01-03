@@ -6,6 +6,7 @@ from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from blenders.blender_utils import restore_eval_format
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
+from features.feature_per_rel_ent_dataset import PerRelEntDataset
 from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 
@@ -22,10 +23,11 @@ class WeightedAverageBlender:
         context = load_score_context(self.params['models'], in_dir=work_dir)
         mapped_triples = self.dataset.testing.mapped_triples
         all_pos = get_all_pos_triples(self.dataset)
-        test_data_feature = PerRelNoSignalDataset(mapped_triples, context, all_pos, eval_feature=self.params['eval_feature'])
-        eval_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 2, 1)
-        eval_mul_score = torch.sum(torch.mul(eval_feature, score_feature), 1)
-        tmp_evl_sum = torch.sum(eval_feature, 1)
+        test_data_feature = PerRelEntDataset(mapped_triples, context, all_pos)
+        rel_eval_feature, ent_rel_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 3, 1)
+        harmonic_mean_eval = 2 * torch.div(torch.mul(rel_eval_feature, ent_rel_feature), torch.add(rel_eval_feature, ent_rel_feature))
+        eval_mul_score = torch.sum(torch.mul(harmonic_mean_eval, score_feature), 1)
+        tmp_evl_sum = torch.sum(harmonic_mean_eval, 1)
         tmp_evl_sum[tmp_evl_sum == 0] = 0.5  # do not divided by zero
         blender = torch.div(eval_mul_score, tmp_evl_sum)
         h_preds, t_preds = torch.chunk(blender, 2, 0)
@@ -54,7 +56,6 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--eval_feature', type=int, default=0)
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})

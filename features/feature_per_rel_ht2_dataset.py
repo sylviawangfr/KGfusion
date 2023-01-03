@@ -13,32 +13,6 @@ class PerRelNoSignalDataset(FusionDataset):
         self.dim = len(context_resource['models']) * 2
         self.eval_feature = eval_feature
 
-    def _get_neg_scores_for_training(self, dev_predictions, times=4):
-        # Create filter
-        targets = [COLUMN_HEAD, COLUMN_TAIL]
-        neg_scores = []
-        neg_index = []
-        for index in range(2):
-            # exclude positive triples
-            positive_filter, _ = create_sparse_positive_filter_(
-                hrt_batch=self.mapped_triples,
-                all_pos_triples=self.all_pos_triples,
-                relation_filter=None,
-                filter_col=targets[index],
-            )
-            scores = filter_scores_(scores=dev_predictions[index], filter_batch=positive_filter)
-            # random pick top_k negs, if no more than top_k, then fill with -999.
-            # However the top_k from different model is not always the same
-            # Our solution is that we pick the top_k * 2 candidates, and pick the most frequent index
-            select_range = self.num_neg * times if self.num_neg * times < scores.shape[-1] else scores.shape[-1]
-            scores_k, indices_k = torch.nan_to_num(scores, nan=-999.).topk(k=select_range)
-            # remove -999 from scores_k
-            nan_index = torch.nonzero(scores_k == -999.)
-            indices_k[nan_index[:, 0], nan_index[:, 1]] = int(-1)
-            neg_scores.append(scores)
-            neg_index.append(indices_k)
-        return neg_scores, neg_index
-
     def _get_rel_eval_scores(self, model_rel_eval, rel2idx):
         rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
         rel_idx = rel_mapped.applymap(lambda x: rel2idx[x] if x in rel2idx else -1)
