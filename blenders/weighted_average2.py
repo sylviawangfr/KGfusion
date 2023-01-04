@@ -18,6 +18,16 @@ class WeightedAverageBlender:
         )
         self.params = params
 
+    def _p1(self, t1, t2):
+        return 2 * torch.div(torch.mul(t1, t2), torch.add(t1, t2))
+
+    def _p2(self, t1, t2):
+        tmp_shape = t1.shape
+        tmp1 = torch.sub(torch.ones(tmp_shape), t1)
+        tmp2 = torch.sub(torch.ones(tmp_shape), t2)
+        tmp3 = torch.mul(tmp1, tmp2)
+        return torch.sub(torch.ones(tmp_shape), tmp3)
+
     def aggregate_scores(self):
         work_dir = self.params['work_dir']
         context = load_score_context(self.params['models'], in_dir=work_dir)
@@ -25,9 +35,9 @@ class WeightedAverageBlender:
         all_pos = get_all_pos_triples(self.dataset)
         test_data_feature = PerRelEntDataset(mapped_triples, context, all_pos)
         rel_eval_feature, ent_rel_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 3, 1)
-        harmonic_mean_eval = 2 * torch.div(torch.mul(rel_eval_feature, ent_rel_feature), torch.add(rel_eval_feature, ent_rel_feature))
-        eval_mul_score = torch.sum(torch.mul(harmonic_mean_eval, score_feature), 1)
-        tmp_evl_sum = torch.sum(harmonic_mean_eval, 1)
+        eval_balanced = self._p2(rel_eval_feature, ent_rel_feature)
+        eval_mul_score = torch.sum(torch.mul(eval_balanced, score_feature), 1)
+        tmp_evl_sum = torch.sum(eval_balanced, 1)
         tmp_evl_sum[tmp_evl_sum == 0] = 0.5  # do not divided by zero
         blender = torch.div(eval_mul_score, tmp_evl_sum)
         h_preds, t_preds = torch.chunk(blender, 2, 0)
@@ -46,7 +56,7 @@ class WeightedAverageBlender:
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        save_to_file(str_re, work_dir + '_'.join(self.params['models']) + "_w_avg.log")
+        save_to_file(str_re, work_dir + '_'.join(self.params['models']) + "_w_avg2.log")
         print(str_re)
         return result
 
