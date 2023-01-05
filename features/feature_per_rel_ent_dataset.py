@@ -20,14 +20,14 @@ class PerRelEntDataset(FusionDataset):
         return rel_h_t_eval
 
     def _get_h_eval_scores(self, model_h_ent_eval, h_ent2idx):
-        rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['h'])
-        h_ent_idx = rel_mapped.applymap(lambda x: h_ent2idx[x] if x in h_ent2idx else -1)
+        head_ent_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 0], columns=['h'])
+        h_ent_idx = head_ent_mapped.applymap(lambda x: h_ent2idx[x] if x in h_ent2idx else -1)
         h_ent_eval = model_h_ent_eval[h_ent_idx.to_numpy().T]
         return h_ent_eval
 
     def _get_t_eval_scores(self, model_t_ent_eval, t_ent2idx):
-        rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['t'])
-        t_ent_idx = rel_mapped.applymap(lambda x: t_ent2idx[x] if x in t_ent2idx else -1)
+        tail_ent_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 2], columns=['t'])
+        t_ent_idx = tail_ent_mapped.applymap(lambda x: t_ent2idx[x] if x in t_ent2idx else -1)
         t_ent_eval = model_t_ent_eval[t_ent_idx.to_numpy().T]
         return t_ent_eval
 
@@ -85,7 +85,6 @@ class PerRelEntDataset(FusionDataset):
         h_ent2idx = self.context_resource['h_ent2idx']
         t_ent2idx = self.context_resource['t_ent2idx']
         num_models = len(self.context_resource['models'])
-        rel2idx = self.context_resource['releval2idx']
         for m in self.context_resource['models']:
             m_context = self.context_resource[m]
             m_preds = m_context['preds']
@@ -96,8 +95,8 @@ class PerRelEntDataset(FusionDataset):
             m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_rel_h_t_eval, 3, 1)
             h_rel_eval.append(m_h_eval)
             t_rel_eval.append(m_t_eval)
-            h_ent_eval.append(self._get_h_eval_scores(m_context['h_ent_eval'], h_ent2idx))
-            t_ent_eval.append(self._get_t_eval_scores(m_context['t_ent_eval'], t_ent2idx))
+            h_ent_eval.append(self._get_h_eval_scores(m_context['h_ent_eval'], h_ent2idx))  # tail predicition
+            t_ent_eval.append(self._get_t_eval_scores(m_context['t_ent_eval'], t_ent2idx))  # head predicition
 
         candidate_num = int(head_scores[0].shape[0] / self.mapped_triples.shape[0])
         rel_h_eval_feature = torch.hstack(h_rel_eval).repeat((1, candidate_num)).reshape([candidate_num * self.mapped_triples.shape[0], num_models])

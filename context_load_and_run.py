@@ -31,6 +31,8 @@ def load_score_context(model_list, in_dir):
     h_ent2idx = utils.load_json(in_dir + "h_ent2idx.json")
     t_ent2idx = utils.load_json(in_dir + "t_ent2idx.json")
     releval2idx = {int(k): releval2idx[k] for k in releval2idx}
+    h_ent2idx = {int(k): h_ent2idx[k] for k in h_ent2idx}
+    t_ent2idx = {int(k): t_ent2idx[k] for k in t_ent2idx}
     context_resource.update({'releval2idx': releval2idx,
                              'relmapping2idx': relmapping2idx,
                              'h_ent2idx': h_ent2idx,
