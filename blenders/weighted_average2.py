@@ -35,7 +35,7 @@ class WeightedAverageBlender:
         all_pos = get_all_pos_triples(self.dataset)
         test_data_feature = PerRelEntDataset(mapped_triples, context, all_pos)
         rel_eval_feature, ent_rel_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 3, 1)
-        eval_balanced = self._p1(rel_eval_feature, ent_rel_feature)
+        eval_balanced = self._p2(rel_eval_feature, ent_rel_feature)
         eval_mul_score = torch.sum(torch.mul(eval_balanced, score_feature), 1)
         tmp_evl_sum = torch.sum(eval_balanced, 1)
         tmp_evl_sum[tmp_evl_sum == 0] = 0.5  # do not divided by zero
