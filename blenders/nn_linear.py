@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import os
 import gc
@@ -7,7 +6,7 @@ import torch.nn.functional as F
 from mlflow.entities import ViewType
 from pykeen.datasets import get_dataset
 from pykeen.evaluation import RankBasedEvaluator
-from blenders.blender_utils import restore_eval_format
+from blenders.blender_utils import restore_eval_format, get_blender_dataset
 from pykeen.typing import MappedTriples, LABEL_HEAD, LABEL_TAIL
 from pykeen.utils import resolve_device
 import torch
@@ -18,8 +17,6 @@ from mlflow import log_param
 import mlflow.pytorch
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
-from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
-from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 
 logging.basicConfig(level=logging.INFO)
@@ -151,13 +148,6 @@ def get_train_loop(loss='bce'):
     return func_map[loss]
 
 
-def get_nn_dataset(keyword='2'):
-    clz = {
-           "2": PerRelNoSignalDataset,
-           "3": ScoresOnlyDataset}
-    return clz[keyword]
-
-
 def get_MLP(keyword='2'):
     clz = {"1": ScoreBlenderLinear1,
            "2": ScoreBlenderLinear2,
@@ -166,7 +156,7 @@ def get_MLP(keyword='2'):
 
 
 def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
-    dataset_cls = get_nn_dataset(para['dataloader'])
+    dataset_cls = get_blender_dataset(para['sampler'])
     train_data = dataset_cls(mapped_triples, context_resource, all_pos_triples,
                                                   num_neg=para['num_neg'])
     train_dataloader = DataLoader(train_data, batch_size=para['batch_size'], shuffle=True, collate_fn=train_data.collate_train)
@@ -207,7 +197,7 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     # Send tensors to device
     h_preds = []
     t_preds = []
-    dataloader_cls = get_nn_dataset(para['dataloader'])
+    dataloader_cls = get_blender_dataset(para['sampler'])
     test_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples)
     test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
     for i, batch in enumerate(test_dataloader):
@@ -268,7 +258,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--dataloader', type=str, default="3")
+    parser.add_argument('--sampler', type=int, default=3)
     parser.add_argument('--linear', type=str, default="1")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument("--lr", type=float, default=0.001)

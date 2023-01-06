@@ -7,7 +7,7 @@ from blenders.blender_utils import restore_eval_format
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from features.feature_per_rel_ent_dataset import PerRelEntDataset
-from features.feature_per_rel_ht2_dataset import PerRelNoSignalDataset
+from features.feature_per_rel_both_dataset import PerRelBothDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 
 
