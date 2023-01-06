@@ -496,9 +496,9 @@ if __name__ == '__main__':
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     eval_key = param1['evaluator_key']
     pykeen_lp.dev_eval(eval_key)
-    pykeen_lp.dev_rel_eval(eval_key)
-    pykeen_lp.dev_ent_eval(eval_key)
-    pykeen_lp.dev_mapping_eval(eval_key)
+    # pykeen_lp.dev_rel_eval(eval_key)
+    # pykeen_lp.dev_ent_eval(eval_key)
+    # pykeen_lp.dev_mapping_eval(eval_key)
     # pykeen_lp.dev_pred(top_k=100)
     # pykeen_lp.test_pred()
     # find_relation_mappings(d)
