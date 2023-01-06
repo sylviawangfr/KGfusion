@@ -482,7 +482,7 @@ if __name__ == '__main__':
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
-    # pykeen_lp.dev_eval()
+    pykeen_lp.dev_eval()
     pykeen_lp.dev_rel_eval()
     pykeen_lp.dev_ent_eval()
     pykeen_lp.dev_mapping_eval()
