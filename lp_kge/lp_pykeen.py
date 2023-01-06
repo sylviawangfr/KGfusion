@@ -1,6 +1,6 @@
 import argparse
 import gc
-from pykeen.evaluation import RankBasedEvaluator
+from pykeen.evaluation import RankBasedEvaluator, ClassificationEvaluator
 from pykeen.evaluation.evaluator import optional_context_manager, create_sparse_positive_filter_, filter_scores_
 from pykeen.models import Model
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL, InductiveMode, MappedTriples, COLUMN_HEAD, COLUMN_TAIL
@@ -112,46 +112,46 @@ def predict_head_tail_scores(
     return model_sample_results.detach().cpu()
 
 
-def find_clusters(model: Model,
-                  mapped_triples,
-                  all_pos_triples=None,
-                  top_k=10
-                  ):
-    eval_preds = predict_head_tail_scores(model, mapped_triples,
-                                          mode=None)  # head_preds + t_preds
-    dev_predictions = torch.chunk(eval_preds, 2, 1)
-    pos_scores = dev_predictions[0]
-    pos_scores = pos_scores[torch.arange(0, mapped_triples.shape[0]),
-                            mapped_triples[:, 0]]
-    # pos_scores = torch.unsqueeze(pos_scores, 1)
-    targets = [COLUMN_HEAD, COLUMN_TAIL]
-    ht_hits = []
-    ht_fails = []
-    for index in range(2):
-        # exclude positive triples
-        positive_filter, _ = create_sparse_positive_filter_(
-            hrt_batch=mapped_triples,
-            all_pos_triples=all_pos_triples,
-            relation_filter=None,
-            filter_col=targets[index],
-        )
-        scores = filter_scores_(scores=dev_predictions[index], filter_batch=positive_filter)
-        # The scores for the true triples have to be rewritten to the scores tensor
-        scores[torch.arange(0, mapped_triples.shape[0]), mapped_triples[:, targets[index]]] = pos_scores
-        select_range = top_k if top_k < scores.shape[-1] else scores.shape[-1]
-        scores_k, indices_k = torch.nan_to_num(scores, nan=-999.).topk(k=select_range)
-        hits = (scores_k == torch.unsqueeze(pos_scores, -1))
-        hit_index = torch.unique(hits.nonzero()[:, 0])
-        triple_index = torch.arange(0, mapped_triples.shape[0])
-        combined = torch.cat((hit_index, triple_index))
-        uniques, counts = combined.unique(return_counts=True)
-        fail_index = uniques[counts == 1]
-        ht_hits.append(hit_index.detach().cpu())
-        ht_fails.append(fail_index.detach().cpu())
-    return ht_hits, ht_fails
+# def find_clusters(model: Model,
+#                   mapped_triples,
+#                   all_pos_triples=None,
+#                   top_k=10
+#                   ):
+#     eval_preds = predict_head_tail_scores(model, mapped_triples,
+#                                           mode=None)  # head_preds + t_preds
+#     dev_predictions = torch.chunk(eval_preds, 2, 1)
+#     pos_scores = dev_predictions[0]
+#     pos_scores = pos_scores[torch.arange(0, mapped_triples.shape[0]),
+#                             mapped_triples[:, 0]]
+#     # pos_scores = torch.unsqueeze(pos_scores, 1)
+#     targets = [COLUMN_HEAD, COLUMN_TAIL]
+#     ht_hits = []
+#     ht_fails = []
+#     for index in range(2):
+#         # exclude positive triples
+#         positive_filter, _ = create_sparse_positive_filter_(
+#             hrt_batch=mapped_triples,
+#             all_pos_triples=all_pos_triples,
+#             relation_filter=None,
+#             filter_col=targets[index],
+#         )
+#         scores = filter_scores_(scores=dev_predictions[index], filter_batch=positive_filter)
+#         # The scores for the true triples have to be rewritten to the scores tensor
+#         scores[torch.arange(0, mapped_triples.shape[0]), mapped_triples[:, targets[index]]] = pos_scores
+#         select_range = top_k if top_k < scores.shape[-1] else scores.shape[-1]
+#         scores_k, indices_k = torch.nan_to_num(scores, nan=-999.).topk(k=select_range)
+#         hits = (scores_k == torch.unsqueeze(pos_scores, -1))
+#         hit_index = torch.unique(hits.nonzero()[:, 0])
+#         triple_index = torch.arange(0, mapped_triples.shape[0])
+#         combined = torch.cat((hit_index, triple_index))
+#         uniques, counts = combined.unique(return_counts=True)
+#         fail_index = uniques[counts == 1]
+#         ht_hits.append(hit_index.detach().cpu())
+#         ht_fails.append(fail_index.detach().cpu())
+#     return ht_hits, ht_fails
 
 
-def per_group_rank_evaluate(model: Model,
+def rank_hits_evaluate(model: Model,
                             mapped_triples,
                             batch_size: Optional[int] = None,
                             slice_size: Optional[int] = None,
@@ -160,34 +160,32 @@ def per_group_rank_evaluate(model: Model,
     evaluator = RankBasedEvaluator()
     metrix_result_g = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
     tmp_eval = metrix_result_g.data
-    head_tail_mrr = [tmp_eval[('hits_at_10', 'head', 'realistic')],
+    head_tail_eval = [tmp_eval[('hits_at_10', 'head', 'realistic')],
                           tmp_eval[('hits_at_10', 'tail', 'realistic')],
                           tmp_eval[('hits_at_10', 'both', 'realistic')]]
-    return head_tail_mrr
+    return head_tail_eval
 
 
-def per_rel_rank_evaluate(model: Model,
-                          mapped_triples_groups,
-                          ordered_keys,
-                          batch_size: Optional[int] = None,
-                          slice_size: Optional[int] = None,
-                          **kwargs,
-                          ):
-    evaluator = RankBasedEvaluator()
-    per_group_eval = dict()
-    for key in ordered_keys:
-        g = mapped_triples_groups.get_group(key)
-        g_tensor = torch.from_numpy(g.values)
-        metrix_result_g = evaluator.evaluate(model, g_tensor, batch_size=batch_size, slice_size=slice_size, **kwargs)
-        per_group_eval.update({key: metrix_result_g})
-    head_tail_mrr = []
-    for key in ordered_keys:
-        tmp_eval = per_group_eval[key].data
-        head_tail_mrr.append([tmp_eval[('hits_at_10', 'head', 'realistic')],
-                              tmp_eval[('hits_at_10', 'tail', 'realistic')],
-                              tmp_eval[('hits_at_10', 'both', 'realistic')]])
-    head_tail_mrr = torch.Tensor(head_tail_mrr)
-    return head_tail_mrr
+def classification_evaluate(model: Model,
+                       mapped_triples,
+                       batch_size: Optional[int] = None,
+                       slice_size: Optional[int] = None,
+                       **kwargs,
+                       ):
+    targets = kwargs['targets']
+    result = []
+    score_key = "f1_score"
+    if len(targets) == 2:
+        for t in targets:
+            evaluator = ClassificationEvaluator()
+            kwargs.update({"targets": [t]})
+            metrix_result = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
+            result.append(metrix_result.data[score_key])
+    evaluator = ClassificationEvaluator()
+    kwargs.update({"targets": [LABEL_HEAD, LABEL_TAIL]})
+    metrix_result = evaluator.evaluate(model, mapped_triples, **kwargs)
+    result.append(metrix_result.data[score_key])
+    return result
 
 
 def get_additional_filter_triples(do_filter_validation, training, validation=None):
@@ -208,7 +206,7 @@ def get_additional_filter_triples(do_filter_validation, training, validation=Non
 
 def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k):
     # Create filter
-    targets = [COLUMN_HEAD, COLUMN_TAIL]
+    targets = [LABEL_HEAD, LABEL_TAIL]
     neg_scores = []
     neg_index = []
     for index in range(2):
@@ -277,21 +275,21 @@ class LpKGE:
         self.models = models
         self.work_dir = work_dir
 
-    def find_cluster(self):
-        mapped_triples_eval = self.dataset.validation.mapped_triples
-        device: torch.device = resolve_device()
-        logger.info(f"Using device: {device}")
-        all_pos_triples = get_all_pos_triples(self.dataset)
-        for m in self.models:
-            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
-            m_out_dir = self.work_dir + m + "/"
-            single_model = torch.load(m_dir)
-            single_model = single_model.to(device)
-            ht_hits_index, ht_fails_index = find_clusters(single_model, mapped_triples_eval, all_pos_triples=all_pos_triples)
-            torch.save(ht_hits_index[0], m_out_dir + "h_hits_index.pt")
-            torch.save(ht_fails_index[0], m_out_dir + "h_fails_index.pt")
-            torch.save(ht_hits_index[1], m_out_dir + "t_hits_index.pt")
-            torch.save(ht_fails_index[1], m_out_dir + "t_fails_index.pt")
+    # def find_cluster(self):
+    #     mapped_triples_eval = self.dataset.validation.mapped_triples
+    #     device: torch.device = resolve_device()
+    #     logger.info(f"Using device: {device}")
+    #     all_pos_triples = get_all_pos_triples(self.dataset)
+    #     for m in self.models:
+    #         m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
+    #         m_out_dir = self.work_dir + m + "/"
+    #         single_model = torch.load(m_dir)
+    #         single_model = single_model.to(device)
+    #         ht_hits_index, ht_fails_index = find_clusters(single_model, mapped_triples_eval, all_pos_triples=all_pos_triples)
+    #         torch.save(ht_hits_index[0], m_out_dir + "h_hits_index.pt")
+    #         torch.save(ht_fails_index[0], m_out_dir + "h_fails_index.pt")
+    #         torch.save(ht_hits_index[1], m_out_dir + "t_hits_index.pt")
+    #         torch.save(ht_fails_index[1], m_out_dir + "t_fails_index.pt")
 
     def dev_rel_eval(self):
         mapped_triples_eval = self.dataset.validation.mapped_triples
@@ -301,14 +299,20 @@ class LpKGE:
         ordered_keys = releval2idx.keys()
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
-        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training)}
+        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
+                             "targets": [LABEL_HEAD, LABEL_TAIL]}
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
             m_out_dir = self.work_dir + m + "/"
             single_model = torch.load(m_dir)
             single_model = single_model.to(device)
-            per_rel_eval = per_rel_rank_evaluate(single_model, groups, ordered_keys, **evaluation_kwargs)
-            torch.save(per_rel_eval.detach().cpu(), m_out_dir + "rel_eval.pt")
+            rel_evals = []
+            for rel in ordered_keys:
+                g = groups.get_group(rel)
+                g_tensor = torch.from_numpy(g.values)
+                head_tail_eval = classification_evaluate(single_model, g_tensor, **evaluation_kwargs)
+                rel_evals.append(head_tail_eval)
+            torch.save(torch.as_tensor(rel_evals), m_out_dir + "rel_eval.pt")
         save2json(releval2idx, self.work_dir + "releval2idx.json")
 
     def dev_ent_eval(self):
@@ -323,35 +327,45 @@ class LpKGE:
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
         evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training)}
-
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
             m_out_dir = self.work_dir + m + "/"
             single_model = torch.load(m_dir)
             single_model = single_model.to(device)
-            evaluator = RankBasedEvaluator()
             h_ent_eval = []
             t_ent_eval = []
             for key in h_ent_keys:
                 g = h_groups.get_group(key)
                 g_tensor = torch.from_numpy(g.values)
-                metrix_result_g = evaluator.evaluate(single_model, g_tensor, **evaluation_kwargs)
-                tmp_eval = metrix_result_g.data
-                tmp_h_eval = tmp_eval[('hits_at_10', 'tail', 'realistic')]
+                evaluation_kwargs.update({"targets": [LABEL_TAIL]})
+                tmp_h_eval = classification_evaluate(single_model, g_tensor, **evaluation_kwargs)
                 h_ent_eval.append(tmp_h_eval)
             for key in t_ent_keys:
                 g = t_groups.get_group(key)
                 g_tensor = torch.from_numpy(g.values)
-                metrix_result_g = evaluator.evaluate(single_model, g_tensor, **evaluation_kwargs)
-                tmp_eval = metrix_result_g.data
-                tmp_t_eval = tmp_eval[('hits_at_10', 'head', 'realistic')]
+                evaluation_kwargs.update({"targets": [LABEL_HEAD]})
+                tmp_t_eval = classification_evaluate(single_model, g_tensor, **evaluation_kwargs)
                 t_ent_eval.append(tmp_t_eval)
             h_ent_eval = torch.as_tensor(h_ent_eval)
             t_ent_eval = torch.as_tensor(t_ent_eval)
-            torch.save(h_ent_eval.detach().cpu(), m_out_dir + "h_ent_eval.pt")
-            torch.save(t_ent_eval.detach().cpu(), m_out_dir + "t_ent_eval.pt")
+            torch.save(h_ent_eval, m_out_dir + "h_ent_eval.pt")
+            torch.save(t_ent_eval, m_out_dir + "t_ent_eval.pt")
         save2json(h_ent2idx, self.work_dir + "h_ent2idx.json")
         save2json(t_ent2idx, self.work_dir + "t_ent2idx.json")
+
+    def dev_eval(self):
+        mapped_triples_eval = self.dataset.validation.mapped_triples
+        device: torch.device = resolve_device()
+        logger.info(f"Using device: {device}")
+        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
+                             "targets": [LABEL_HEAD, LABEL_TAIL]}
+        result = []
+        for m in self.models:
+            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
+            single_model = torch.load(m_dir)
+            single_model = single_model.to(device)
+            result.append(classification_evaluate(single_model, mapped_triples_eval, **evaluation_kwargs))
+            print(result)
 
     def dev_mapping_eval(self):
         mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
@@ -364,7 +378,8 @@ class LpKGE:
             relmapping2idx.update({int(rel): idx for rel in mapped_rels})
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
-        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training)}
+        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
+                             "targets": [LABEL_HEAD, LABEL_TAIL]}
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
             m_out_dir = self.work_dir + m + "/"
@@ -376,7 +391,7 @@ class LpKGE:
                 tri_group = triples_df.query('r in @tmp_rels')
                 if len(tri_group.index) > 0:
                     mapped_group = torch.from_numpy(tri_group.values)
-                    group_eval = per_group_rank_evaluate(single_model, mapped_group, **evaluation_kwargs)
+                    group_eval = classification_evaluate(single_model, mapped_group, **evaluation_kwargs)
                     model_eval.append(group_eval)
                 else:
                     model_eval.append([0.01, 0.01, 0.01])
@@ -421,38 +436,38 @@ class LpKGE:
             test_preds = predict_head_tail_scores(single_model, self.dataset.testing.mapped_triples, mode=None)
             torch.save(test_preds, m_out_dir + "preds.pt")
 
-    def analyze_clusters(self):
-        context_resource = {m: {} for m in self.models}
-        for m in self.models:
-            read_dir = self.work_dir + m + '/'
-            h_hits_index = torch.load(read_dir + "h_hits_index.pt")
-            t_hits_index = torch.load(read_dir + "t_hits_index.pt")
-            h_fails_index = torch.load(read_dir + "h_fails_index.pt")
-            t_fails_index = torch.load(read_dir + "t_fails_index.pt")
-            h_hits_ent = self.dataset.validation.mapped_triples[h_hits_index, 2]
-            h_hits_rel = self.dataset.validation.mapped_triples[h_hits_index, 1]
-            h_fails_ent = self.dataset.validation.mapped_triples[h_fails_index, 2]
-            h_fails_rel = self.dataset.validation.mapped_triples[h_fails_index, 1]
-            t_hits_ent = self.dataset.validation.mapped_triples[t_hits_index, 0]
-            t_hits_rel = self.dataset.validation.mapped_triples[t_hits_index, 1],
-            h_ent_uniques, h_ent_counts = h_hits_ent.unique(return_counts=True)
-            h_ent_fail_uniques, h_ent_fail_counts = h_fails_ent.unique(return_counts=True)
-            h_rel_uniques, h_rel_counts = h_hits_rel.unique(return_counts=True)
-            h_rel_fail_uniques, h_rel_fail_counts = h_fails_rel.unique(return_counts=True)
-            # context_resource[m] = {'h_hits': self.dataset.validation.mapped_triples[h_hits, 1:],
-            #                        't_hits': self.dataset.validation.mapped_triples[t_hits, 0:2]}
-
-        # get r,t sets
-        all_h_hits = torch.cat([v['h_hits'] for k, v in context_resource.items()], 0)
-        h_hits_uniques, h_hits_counts = all_h_hits.unique(return_counts=True)
-
-        all_t_hits = torch.cat([v['t_hits'] for k,v in context_resource.items()], 0)
-        all_h_fails = torch.cat([v['h_fails'] for k,v in context_resource.items()], 0)
-        all_t_fails = torch.cat([v['t_fails'] for k,v in context_resource.items()], 0)
-        h_hits_uniques, h_hits_counts = all_h_hits.unique(return_counts=True)
-        t_hits_uniques, t_hits_counts = all_t_hits.unique(return_counts=True)
-        h_fails_uniques, h_fails_counts = all_h_fails.unique(return_counts=True)
-        t_fails_uniques, t_fails_counts = all_t_fails.unique(return_counts=True)
+    # def analyze_clusters(self):
+    #     context_resource = {m: {} for m in self.models}
+    #     for m in self.models:
+    #         read_dir = self.work_dir + m + '/'
+    #         h_hits_index = torch.load(read_dir + "h_hits_index.pt")
+    #         t_hits_index = torch.load(read_dir + "t_hits_index.pt")
+    #         h_fails_index = torch.load(read_dir + "h_fails_index.pt")
+    #         t_fails_index = torch.load(read_dir + "t_fails_index.pt")
+    #         h_hits_ent = self.dataset.validation.mapped_triples[h_hits_index, 2]
+    #         h_hits_rel = self.dataset.validation.mapped_triples[h_hits_index, 1]
+    #         h_fails_ent = self.dataset.validation.mapped_triples[h_fails_index, 2]
+    #         h_fails_rel = self.dataset.validation.mapped_triples[h_fails_index, 1]
+    #         t_hits_ent = self.dataset.validation.mapped_triples[t_hits_index, 0]
+    #         t_hits_rel = self.dataset.validation.mapped_triples[t_hits_index, 1],
+    #         h_ent_uniques, h_ent_counts = h_hits_ent.unique(return_counts=True)
+    #         h_ent_fail_uniques, h_ent_fail_counts = h_fails_ent.unique(return_counts=True)
+    #         h_rel_uniques, h_rel_counts = h_hits_rel.unique(return_counts=True)
+    #         h_rel_fail_uniques, h_rel_fail_counts = h_fails_rel.unique(return_counts=True)
+    #         # context_resource[m] = {'h_hits': self.dataset.validation.mapped_triples[h_hits, 1:],
+    #         #                        't_hits': self.dataset.validation.mapped_triples[t_hits, 0:2]}
+    #
+    #     # get r,t sets
+    #     all_h_hits = torch.cat([v['h_hits'] for k, v in context_resource.items()], 0)
+    #     h_hits_uniques, h_hits_counts = all_h_hits.unique(return_counts=True)
+    #
+    #     all_t_hits = torch.cat([v['t_hits'] for k,v in context_resource.items()], 0)
+    #     all_h_fails = torch.cat([v['h_fails'] for k,v in context_resource.items()], 0)
+    #     all_t_fails = torch.cat([v['t_fails'] for k,v in context_resource.items()], 0)
+    #     h_hits_uniques, h_hits_counts = all_h_hits.unique(return_counts=True)
+    #     t_hits_uniques, t_hits_counts = all_t_hits.unique(return_counts=True)
+    #     h_fails_uniques, h_fails_counts = all_h_fails.unique(return_counts=True)
+    #     t_fails_uniques, t_fails_counts = all_t_fails.unique(return_counts=True)
 
 
 
@@ -467,11 +482,10 @@ if __name__ == '__main__':
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
+    # pykeen_lp.dev_eval()
+    pykeen_lp.dev_rel_eval()
     pykeen_lp.dev_ent_eval()
-    # pykeen_lp.find_cluster()
-    # pykeen_lp.analyze_clusters()
-    # pykeen_lp.dev_mapping_eval()
+    pykeen_lp.dev_mapping_eval()
     # pykeen_lp.dev_pred(top_k=100)
-    # pykeen_lp.dev_rel_eval()
     # pykeen_lp.test_pred()
     # find_relation_mappings(d)
