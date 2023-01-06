@@ -150,6 +150,12 @@ def predict_head_tail_scores(
 #         ht_fails.append(fail_index.detach().cpu())
 #     return ht_hits, ht_fails
 
+def get_evaluator(keyword="f1"):
+    clz = {
+        "f1": classification_evaluate,
+        "rank": rank_hits_evaluate}
+    return clz[keyword]
+
 
 def rank_hits_evaluate(model: Model,
                             mapped_triples,
@@ -157,13 +163,16 @@ def rank_hits_evaluate(model: Model,
                             slice_size: Optional[int] = None,
                             **kwargs,
                             ):
+    targets = kwargs["targets"]
     evaluator = RankBasedEvaluator()
     metrix_result_g = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
     tmp_eval = metrix_result_g.data
-    head_tail_eval = [tmp_eval[('hits_at_10', 'head', 'realistic')],
-                          tmp_eval[('hits_at_10', 'tail', 'realistic')],
-                          tmp_eval[('hits_at_10', 'both', 'realistic')]]
-    return head_tail_eval
+    if len(targets) == 2:
+        return [tmp_eval[('hits_at_10', 'head', 'realistic')],
+                              tmp_eval[('hits_at_10', 'tail', 'realistic')],
+                              tmp_eval[('hits_at_10', 'both', 'realistic')]]
+    else:
+        return [tmp_eval[('hits_at_10', targets[0], 'realistic')]]
 
 
 def classification_evaluate(model: Model,
@@ -291,7 +300,7 @@ class LpKGE:
     #         torch.save(ht_hits_index[1], m_out_dir + "t_hits_index.pt")
     #         torch.save(ht_fails_index[1], m_out_dir + "t_fails_index.pt")
 
-    def dev_rel_eval(self):
+    def dev_rel_eval(self, evaluator_key):
         mapped_triples_eval = self.dataset.validation.mapped_triples
         triples_df = pd.DataFrame(data=mapped_triples_eval.numpy(), columns=['h', 'r', 't'])
         groups = triples_df.groupby('r', group_keys=True, as_index=False)
@@ -310,12 +319,13 @@ class LpKGE:
             for rel in ordered_keys:
                 g = groups.get_group(rel)
                 g_tensor = torch.from_numpy(g.values)
-                head_tail_eval = classification_evaluate(single_model, g_tensor, **evaluation_kwargs)
+                evaluator_fun = get_evaluator(evaluator_key)
+                head_tail_eval = evaluator_fun(single_model, g_tensor, **evaluation_kwargs)
                 rel_evals.append(head_tail_eval)
             torch.save(torch.as_tensor(rel_evals), m_out_dir + "rel_eval.pt")
         save2json(releval2idx, self.work_dir + "releval2idx.json")
 
-    def dev_ent_eval(self):
+    def dev_ent_eval(self, evaluator_key='f1'):
         mapped_triples_eval = self.dataset.validation.mapped_triples
         triples_df = pd.DataFrame(data=mapped_triples_eval.numpy(), columns=['h', 'r', 't'])
         h_groups = triples_df.groupby('h', group_keys=True, as_index=False)
@@ -327,6 +337,7 @@ class LpKGE:
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
         evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training)}
+        evaluator_fun = get_evaluator(evaluator_key)
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
             m_out_dir = self.work_dir + m + "/"
@@ -338,13 +349,13 @@ class LpKGE:
                 g = h_groups.get_group(key)
                 g_tensor = torch.from_numpy(g.values)
                 evaluation_kwargs.update({"targets": [LABEL_TAIL]})
-                tmp_h_eval = classification_evaluate(single_model, g_tensor, **evaluation_kwargs)
+                tmp_h_eval = evaluator_fun(single_model, g_tensor, **evaluation_kwargs)
                 h_ent_eval.append(tmp_h_eval)
             for key in t_ent_keys:
                 g = t_groups.get_group(key)
                 g_tensor = torch.from_numpy(g.values)
                 evaluation_kwargs.update({"targets": [LABEL_HEAD]})
-                tmp_t_eval = classification_evaluate(single_model, g_tensor, **evaluation_kwargs)
+                tmp_t_eval = evaluator_fun(single_model, g_tensor, **evaluation_kwargs)
                 t_ent_eval.append(tmp_t_eval)
             h_ent_eval = torch.as_tensor(h_ent_eval)
             t_ent_eval = torch.as_tensor(t_ent_eval)
@@ -353,21 +364,22 @@ class LpKGE:
         save2json(h_ent2idx, self.work_dir + "h_ent2idx.json")
         save2json(t_ent2idx, self.work_dir + "t_ent2idx.json")
 
-    def dev_eval(self):
+    def dev_eval(self, evaluator_key):
         mapped_triples_eval = self.dataset.validation.mapped_triples
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
         evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
                              "targets": [LABEL_HEAD, LABEL_TAIL]}
         result = []
+        evaluator_fun = get_evaluator(evaluator_key)
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
             single_model = torch.load(m_dir)
             single_model = single_model.to(device)
-            result.append(classification_evaluate(single_model, mapped_triples_eval, **evaluation_kwargs))
+            result.append(evaluator_fun(single_model, mapped_triples_eval, **evaluation_kwargs))
             print(result)
 
-    def dev_mapping_eval(self):
+    def dev_mapping_eval(self, evaluator_key):
         mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
         rel_mappings = find_relation_mappings(self.dataset)
         dev = self.dataset.validation.mapped_triples
@@ -380,6 +392,7 @@ class LpKGE:
         logger.info(f"Using device: {device}")
         evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
                              "targets": [LABEL_HEAD, LABEL_TAIL]}
+        evaluator_fun = get_evaluator(evaluator_key)
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
             m_out_dir = self.work_dir + m + "/"
@@ -391,7 +404,7 @@ class LpKGE:
                 tri_group = triples_df.query('r in @tmp_rels')
                 if len(tri_group.index) > 0:
                     mapped_group = torch.from_numpy(tri_group.values)
-                    group_eval = classification_evaluate(single_model, mapped_group, **evaluation_kwargs)
+                    group_eval = evaluator_fun(single_model, mapped_group, **evaluation_kwargs)
                     model_eval.append(group_eval)
                 else:
                     model_eval.append([0.01, 0.01, 0.01])
@@ -470,22 +483,22 @@ class LpKGE:
     #     t_fails_uniques, t_fails_counts = all_t_fails.unique(return_counts=True)
 
 
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     # parser.add_argument('--models', type=str, default="NodePiece")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    parser.add_argument('--evaluator_key', type=str, default="f1")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
-    pykeen_lp.dev_eval()
-    pykeen_lp.dev_rel_eval()
-    pykeen_lp.dev_ent_eval()
-    pykeen_lp.dev_mapping_eval()
+    eval_key = param1['evaluator_key']
+    pykeen_lp.dev_eval(eval_key)
+    pykeen_lp.dev_rel_eval(eval_key)
+    pykeen_lp.dev_ent_eval(eval_key)
+    pykeen_lp.dev_mapping_eval(eval_key)
     # pykeen_lp.dev_pred(top_k=100)
     # pykeen_lp.test_pred()
     # find_relation_mappings(d)

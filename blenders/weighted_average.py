@@ -77,7 +77,7 @@ if __name__ == '__main__':
     # "3": ScoresOnlyDataset,
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
-    parser.add_argument('--sampler', type=int, default=4)
+    parser.add_argument('--sampler', type=int, default=2)
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
