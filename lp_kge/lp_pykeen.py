@@ -18,6 +18,8 @@ import torch
 import pandas as pd
 from pykeen.typing import MappedTriples
 from pykeen.utils import resolve_device
+
+from lp_kge.patched_classification_evaluator import PatchedClassificationEvaluator
 from utils import save2json
 from pykeen.utils import prepare_filter_triples
 
@@ -187,11 +189,11 @@ def classification_evaluate(model: Model,
     score_key = "f1_score"
     if len(targets) == 2:
         for t in targets:
-            evaluator = ClassificationEvaluator()
+            evaluator = PatchedClassificationEvaluator()
             kwargs.update({"targets": [t]})
             metrix_result = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
             result.append(metrix_result.data[score_key])
-    evaluator = ClassificationEvaluator()
+    evaluator = PatchedClassificationEvaluator()
     kwargs.update({"targets": [LABEL_HEAD, LABEL_TAIL]})
     metrix_result = evaluator.evaluate(model, mapped_triples, **kwargs)
     result.append(metrix_result.data[score_key])
