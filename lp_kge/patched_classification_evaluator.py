@@ -76,7 +76,7 @@ class PatchedClassificationEvaluator(Evaluator):
             y_true = np.concatenate([self.all_positives[k] for k in all_keys], axis=0).flatten()
             result = ClassificationMetricResults.from_scores(y_true, y_score)
         else:
-            result = None
+            result = ClassificationMetricResults({})
         # Clear buffers
         self.all_positives.clear()
         self.all_scores.clear()
