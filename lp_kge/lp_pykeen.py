@@ -22,6 +22,7 @@ from utils import save2json
 from pykeen.utils import prepare_filter_triples
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def get_all_pos_triples(dataset: pykeen.datasets.Dataset):
@@ -374,7 +375,8 @@ class LpKGE:
         evaluator_fun = get_evaluator(evaluator_key)
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
-            single_model = torch.load(m_dir, map_location=torch.device('cpu'))
+            # single_model = torch.load(m_dir, map_location=torch.device('cpu'))
+            single_model = torch.load(m_dir)
             single_model = single_model.to(device)
             result.append(evaluator_fun(single_model, mapped_triples_eval, **evaluation_kwargs))
             print(result)
