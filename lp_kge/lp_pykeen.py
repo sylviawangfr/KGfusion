@@ -368,7 +368,7 @@ class LpKGE:
     def dev_eval(self, evaluator_key):
         mapped_triples_eval = self.dataset.validation.mapped_triples
         device: torch.device = resolve_device()
-        logger.info(f"Using device: {device}")
+        print(f"Using device: {device}")
         evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
                              "targets": [LABEL_HEAD, LABEL_TAIL]}
         result = []
