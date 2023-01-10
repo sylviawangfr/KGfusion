@@ -1,16 +1,12 @@
 import argparse
 import torch
-from pykeen.datasets import get_dataset
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
-from blenders.blender_utils import restore_eval_format, get_blender_dataset
+from blenders.blender_utils import restore_eval_format, get_features_clz, Blender
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
-from features.feature_per_ent_dataset import PerEntDataset
-from features.feature_per_rel_dataset import PerRelDataset
-from features.feature_per_rel_both_dataset import PerRelBothDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
-import numpy as np
+
 
 def weighted_mean(t1, weights):
     eval_mul_score = torch.sum(torch.mul(t1, weights), 1)
@@ -18,6 +14,7 @@ def weighted_mean(t1, weights):
     tmp_evl_sum[tmp_evl_sum == 0] = 0.5  # do not divided by zero
     tmp_blender = torch.div(eval_mul_score, tmp_evl_sum)
     return tmp_blender
+
 
 def weighted_harmonic_mean(t1, weights):
     # normalize weights
@@ -30,20 +27,21 @@ def weighted_harmonic_mean(t1, weights):
     return n_avg
 
 
-class WeightedAverageBlender:
+class WeightedAverageBlender1(Blender):
     def __init__(self, params):
-        self.dataset = get_dataset(
-            dataset=params['dataset']
-        )
-        self.params = params
+        super().__init__(params)
+        self.context = load_score_context(self.params['models'],
+                                          in_dir=params['work_dir'],
+                                          evaluator_key=params['evaluator_key'],
+                                          rel_mapping=params['rel_mapping']
+                                          )
 
     def aggregate_scores(self):
         work_dir = self.params['work_dir']
-        context = load_score_context(self.params['models'], in_dir=work_dir)
         mapped_triples = self.dataset.testing.mapped_triples
         all_pos = get_all_pos_triples(self.dataset)
-        get_sampler = get_blender_dataset(param1['sampler'])
-        test_data_feature = get_sampler(mapped_triples, context, all_pos)
+        get_features = get_features_clz(param1['features'])
+        test_data_feature = get_features(mapped_triples, self.context, all_pos)
         eval_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 2, 1)
         blender = weighted_mean(score_feature, eval_feature)
         h_preds, t_preds = torch.chunk(blender, 2, 0)
@@ -72,14 +70,16 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    parser.add_argument('--evaluator_key', type=str, default="rank")
+    parser.add_argument('--rel_mapping', type=str, default='False')
     # "1": PerRelDataset,
     # "2": PerRelBothDataset,
     # "3": ScoresOnlyDataset,
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
-    parser.add_argument('--sampler', type=int, default=2)
+    parser.add_argument('--features', type=int, default=2)  # 1, 2, 4
     args = parser.parse_args()
     param1 = args.__dict__
-    param1.update({"models": args.models.split('_')})
-    wab = WeightedAverageBlender(param1)
+    param1.update({"models": args.models.split('_'), "rel_mapping": args.rel_mapping == 'True'})
+    wab = WeightedAverageBlender1(param1)
     wab.aggregate_scores()

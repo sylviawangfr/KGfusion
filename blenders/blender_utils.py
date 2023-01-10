@@ -5,12 +5,26 @@ from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_d
 from pykeen.typing import MappedTriples, Target
 from torch import FloatTensor
 import torch
-
 from features.feature_per_ent_dataset import PerEntDataset
 from features.feature_per_rel_both_dataset import PerRelBothDataset
 from features.feature_per_rel_dataset import PerRelDataset
 from features.feature_per_rel_ent_dataset import PerRelEntDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
+from abc import ABC, abstractmethod
+from pykeen.datasets import get_dataset
+
+
+class Blender(ABC):
+    def __init__(self, params):
+        self.dataset = get_dataset(
+            dataset=params['dataset']
+        )
+        self.params = params
+
+
+    @abstractmethod
+    def aggregate_scores(self):
+        pass
 
 
 def restore_eval_format(
@@ -91,7 +105,7 @@ def restore_eval_format(
     return relation_filter
 
 
-def get_blender_dataset(keyword=2):
+def get_features_clz(keyword=2):
     clz = {
         1: PerRelDataset,
         2: PerRelBothDataset,
@@ -99,3 +113,4 @@ def get_blender_dataset(keyword=2):
         4: PerEntDataset,
         5: PerRelEntDataset}
     return clz[keyword]
+

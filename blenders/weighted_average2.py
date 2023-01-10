@@ -1,22 +1,22 @@
 import argparse
 import torch
-from pykeen.datasets import get_dataset
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
-from blenders.blender_utils import restore_eval_format
+from blenders.blender_utils import restore_eval_format, Blender
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from features.feature_per_rel_ent_dataset import PerRelEntDataset
-from features.feature_per_rel_both_dataset import PerRelBothDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 
 
-class WeightedAverageBlender:
+class WeightedAverageBlender2(Blender):
     def __init__(self, params):
-        self.dataset = get_dataset(
-            dataset=params['dataset']
-        )
-        self.params = params
+        super().__init__(params)
+        self.context = load_score_context(self.params['models'],
+                                          in_dir=params['work_dir'],
+                                          evaluator_key=params['evaluator_key'],
+                                          rel_mapping=False
+                                          )
 
     def _p1(self, t1, t2):
         return 2 * torch.div(torch.mul(t1, t2), torch.add(t1, t2))
@@ -30,10 +30,9 @@ class WeightedAverageBlender:
 
     def aggregate_scores(self):
         work_dir = self.params['work_dir']
-        context = load_score_context(self.params['models'], in_dir=work_dir)
         mapped_triples = self.dataset.testing.mapped_triples
         all_pos = get_all_pos_triples(self.dataset)
-        test_data_feature = PerRelEntDataset(mapped_triples, context, all_pos)
+        test_data_feature = PerRelEntDataset(mapped_triples, self.context, all_pos)
         rel_eval_feature, ent_rel_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 3, 1)
         eval_balanced = self._p2(rel_eval_feature, ent_rel_feature)
         eval_mul_score = torch.sum(torch.mul(eval_balanced, score_feature), 1)
@@ -66,8 +65,9 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    parser.add_argument('--evaluator_key', type=str, default="rank")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
-    wab = WeightedAverageBlender(param1)
+    wab = WeightedAverageBlender2(param1)
     wab.aggregate_scores()

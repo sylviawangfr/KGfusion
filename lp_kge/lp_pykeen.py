@@ -218,7 +218,7 @@ def get_additional_filter_triples(do_filter_validation, training, validation=Non
 
 def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k):
     # Create filter
-    targets = [LABEL_HEAD, LABEL_TAIL]
+    targets = [COLUMN_HEAD, COLUMN_TAIL]
     neg_scores = []
     neg_index = []
     for index in range(2):
@@ -325,8 +325,8 @@ class LpKGE:
                 evaluator_fun = get_evaluator(evaluator_key)
                 head_tail_eval = evaluator_fun(single_model, g_tensor, **evaluation_kwargs)
                 rel_evals.append(head_tail_eval)
-            torch.save(torch.as_tensor(rel_evals), m_out_dir + "rel_eval.pt")
-        save2json(releval2idx, self.work_dir + "releval2idx.json")
+            torch.save(torch.as_tensor(rel_evals), m_out_dir + f"{evaluator_key}_rel_eval.pt")
+        save2json(releval2idx, self.work_dir + f"{evaluator_key}_releval2idx.json")
 
     def dev_ent_eval(self, evaluator_key='f1'):
         mapped_triples_eval = self.dataset.validation.mapped_triples
@@ -362,10 +362,10 @@ class LpKGE:
                 t_ent_eval.append(tmp_t_eval)
             h_ent_eval = torch.as_tensor(h_ent_eval)
             t_ent_eval = torch.as_tensor(t_ent_eval)
-            torch.save(h_ent_eval, m_out_dir + "h_ent_eval.pt")
-            torch.save(t_ent_eval, m_out_dir + "t_ent_eval.pt")
-        save2json(h_ent2idx, self.work_dir + "h_ent2idx.json")
-        save2json(t_ent2idx, self.work_dir + "t_ent2idx.json")
+            torch.save(h_ent_eval, m_out_dir + f"{evaluator_key}_h_ent_eval.pt")
+            torch.save(t_ent_eval, m_out_dir + f"{evaluator_key}_t_ent_eval.pt")
+        save2json(h_ent2idx, self.work_dir + f"{evaluator_key}_h_ent2idx.json")
+        save2json(t_ent2idx, self.work_dir + f"{evaluator_key}_t_ent2idx.json")
 
     def dev_eval(self, evaluator_key):
         mapped_triples_eval = self.dataset.validation.mapped_triples
@@ -412,8 +412,8 @@ class LpKGE:
                     model_eval.append(group_eval)
                 else:
                     model_eval.append([0.01, 0.01, 0.01])
-            torch.save(torch.Tensor(model_eval), m_out_dir + "mapping_eval.pt")
-        save2json(relmapping2idx, self.work_dir + "relmapping2idx.json")
+            torch.save(torch.Tensor(model_eval), m_out_dir + f"{evaluator_key}_mapping_rel_eval.pt")
+        save2json(relmapping2idx, self.work_dir + f"{evaluator_key}_mapping_releval2idx.json")
 
     def dev_pred(self, top_k):
         device: torch.device = resolve_device()
@@ -499,10 +499,9 @@ if __name__ == '__main__':
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     eval_key = param1['evaluator_key']
-    # pykeen_lp.dev_eval(eval_key)
-    pykeen_lp.dev_rel_eval(eval_key)
+    # pykeen_lp.dev_rel_eval(eval_key)
     pykeen_lp.dev_ent_eval(eval_key)
-    pykeen_lp.dev_mapping_eval(eval_key)
+    # pykeen_lp.dev_mapping_eval(eval_key)
     # pykeen_lp.dev_pred(top_k=100)
     # pykeen_lp.test_pred()
-    # find_relation_mappings(d)
+

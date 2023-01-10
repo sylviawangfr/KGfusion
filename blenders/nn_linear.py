@@ -4,9 +4,8 @@ import os
 import gc
 import torch.nn.functional as F
 from mlflow.entities import ViewType
-from pykeen.datasets import get_dataset
 from pykeen.evaluation import RankBasedEvaluator
-from blenders.blender_utils import restore_eval_format, get_blender_dataset
+from blenders.blender_utils import restore_eval_format, get_features_clz, Blender
 from pykeen.typing import MappedTriples, LABEL_HEAD, LABEL_TAIL
 from pykeen.utils import resolve_device
 import torch
@@ -156,7 +155,7 @@ def get_MLP(keyword='2'):
 
 
 def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
-    dataset_cls = get_blender_dataset(para['sampler'])
+    dataset_cls = get_features_clz(para['sampler'])
     train_data = dataset_cls(mapped_triples, context_resource, all_pos_triples,
                                                   num_neg=para['num_neg'])
     train_dataloader = DataLoader(train_data, batch_size=para['batch_size'], shuffle=True, collate_fn=train_data.collate_train)
@@ -197,7 +196,7 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     # Send tensors to device
     h_preds = []
     t_preds = []
-    dataloader_cls = get_blender_dataset(para['sampler'])
+    dataloader_cls = get_features_clz(para['sampler'])
     test_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples)
     test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
     for i, batch in enumerate(test_dataloader):
@@ -224,12 +223,9 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     return result
 
 
-class NNLinearBlender:
+class NNLinearBlender(Blender):
     def __init__(self, params):
-        self.dataset = get_dataset(
-            dataset=params['dataset']
-        )
-        self.params = params
+        super().__init__(params)
 
     def aggregate_scores(self):
         if self.params['mlflow']:
@@ -240,8 +236,7 @@ class NNLinearBlender:
             for k in self.params:
                 log_param(k, self.params[k])
         # 1. load individual model context
-        work_dir = self.params['work_dir']
-        context = load_score_context(para['models'], in_dir=work_dir)
+        context = self.context
         # 2. train model
         all_pos = get_all_pos_triples(self.dataset)
         mo = train_aggregation_model(self.dataset.validation.mapped_triples, context, all_pos, self.params)

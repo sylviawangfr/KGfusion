@@ -8,10 +8,9 @@ from features.FusionDataset import FusionDataset, get_multi_model_neg_topk
 class PerRelDataset(FusionDataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
-    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, eval_feature=0, num_neg=4):
+    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
         self.dim = len(context_resource['models']) * 2
-        self.eval_feature = eval_feature
 
     def _get_rel_eval_scores(self, model_rel_eval, rel2idx):
         rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
