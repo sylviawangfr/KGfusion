@@ -70,14 +70,14 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--evaluator_key', type=str, default="rank")
+    parser.add_argument('--evaluator_key', type=str, default="f1")
     parser.add_argument('--rel_mapping', type=str, default='False')
     # "1": PerRelDataset,
     # "2": PerRelBothDataset,
     # "3": ScoresOnlyDataset,
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
-    parser.add_argument('--features', type=int, default=2)  # 1, 2, 4
+    parser.add_argument('--features', type=int, default=1)  # 1, 2, 4
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_'), "rel_mapping": args.rel_mapping == 'True'})
