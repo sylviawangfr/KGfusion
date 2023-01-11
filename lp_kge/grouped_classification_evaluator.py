@@ -39,6 +39,7 @@ class GroupededClassificationEvaluator(Evaluator):
             filtered=False,
             requires_positive_mask=True,
             batch_size=32,
+            automatic_memory_optimization=False
             **kwargs,
         )
         self.targets = []
@@ -103,9 +104,9 @@ class GroupededClassificationEvaluator(Evaluator):
     def finalize(self) -> GroupedMetricResults:  # noqa: D102
         # Because the order of the values of an dictionary is not guaranteed,
         # we need to retrieve scores and masks using the exact same key order.
-        # print("keys/counts:")
-        # print(len(self.all_scores.keys()))
-        # print(str(self.counts))
+        print("keys/counts:")
+        print(len(self.all_scores.keys()))
+        print(str(self.counts))
         all_f1 = []
         all_keys = list(self.all_scores.keys())
         if len(all_keys) > 0:
