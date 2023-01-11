@@ -86,8 +86,8 @@ class GroupededClassificationEvaluator(Evaluator):
                 assert len(key_suffix) == 2
                 key_suffix = cast(Tuple[int, int], key_suffix)
                 key = (target,) + key_suffix
-                g_scores.update({key: self.all_scores[key]})
-                g_positives.update({key: self.all_positives[key]})
+                g_scores[key] = self.all_scores[key]
+                g_positives[key] = self.all_positives[key]
         tmp_keys = list(g_scores.keys())
         g_y_score = np.concatenate([g_scores[k] for k in tmp_keys], axis=0).flatten()
         g_y_true = np.concatenate([g_positives[k] for k in tmp_keys], axis=0).flatten()
@@ -114,7 +114,7 @@ class GroupededClassificationEvaluator(Evaluator):
                 else:
                     all_f1.append(self._get_group_scores_and_positives(g_triples, self.targets))
             ts_all_f1 = torch.as_tensor(all_f1)
-            return GroupedMetricResults({'f1': ts_all_f1})
+            result = GroupedMetricResults({'f1': ts_all_f1})
         else:
             result = GroupedMetricResults({})
         # Clear buffers
