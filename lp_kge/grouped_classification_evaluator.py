@@ -38,6 +38,7 @@ class GroupededClassificationEvaluator(Evaluator):
         super().__init__(
             filtered=False,
             requires_positive_mask=True,
+            batch_size=32,
             **kwargs,
         )
         self.targets = []
@@ -88,6 +89,8 @@ class GroupededClassificationEvaluator(Evaluator):
                 assert len(key_suffix) == 2
                 key_suffix = cast(Tuple[int, int], key_suffix)
                 key = (target,) + key_suffix
+                if key not in self.all_scores.keys():
+                    continue
                 g_scores[key] = self.all_scores[key]
                 g_positives[key] = self.all_positives[key]
         tmp_keys = list(g_scores.keys())
