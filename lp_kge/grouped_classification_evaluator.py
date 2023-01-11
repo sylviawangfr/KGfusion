@@ -39,7 +39,7 @@ class GroupededClassificationEvaluator(Evaluator):
             filtered=False,
             requires_positive_mask=True,
             batch_size=32,
-            automatic_memory_optimization=False
+            automatic_memory_optimization=False,
             **kwargs,
         )
         self.targets = []
