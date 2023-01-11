@@ -45,6 +45,7 @@ class GroupededClassificationEvaluator(Evaluator):
         self.all_positives = {}
         self.index_group = {}
         self.eval_triples = []
+        self.counts = 0
 
     # docstr-coverage: inherited
     def process_scores_(
@@ -72,10 +73,9 @@ class GroupededClassificationEvaluator(Evaluator):
             key = (target,) + key_suffix
             self.all_scores[key] = scores[i]
             self.all_positives[key] = dense_positive_mask[i]
+            self.counts += 1
 
     def _get_group_scores_and_positives(self, g_triples, tmp_targets):
-        print("keys:")
-        print(len(self.all_scores.keys()))
         g_scores = {}
         g_positives = {}
         for target in tmp_targets:
@@ -100,6 +100,10 @@ class GroupededClassificationEvaluator(Evaluator):
     def finalize(self) -> GroupedMetricResults:  # noqa: D102
         # Because the order of the values of an dictionary is not guaranteed,
         # we need to retrieve scores and masks using the exact same key order.
+        print("keys/counts:")
+        print(len(self.all_scores.keys()))
+        print(str(self.counts))
+
         all_f1 = []
         all_keys = list(self.all_scores.keys())
         if len(all_keys) > 0:
