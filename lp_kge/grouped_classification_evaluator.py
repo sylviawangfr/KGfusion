@@ -90,7 +90,7 @@ class GroupededClassificationEvaluator(Evaluator):
                 key_suffix = cast(Tuple[int, int], key_suffix)
                 key = (target,) + key_suffix
                 if key not in self.all_scores.keys():
-                    continue
+                    continue  # pykeen evaluator only do same size batches, and ignore the last a few triples.
                 g_scores[key] = self.all_scores[key]
                 g_positives[key] = self.all_positives[key]
         tmp_keys = list(g_scores.keys())
