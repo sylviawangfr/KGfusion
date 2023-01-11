@@ -75,7 +75,7 @@ class GroupededClassificationEvaluator(Evaluator):
 
     def _get_group_scores_and_positives(self, g_triples, tmp_targets):
         print("keys:")
-        print(self.all_scores.keys())
+        print(len(self.all_scores.keys()))
         g_scores = {}
         g_positives = {}
         for target in tmp_targets:
@@ -121,7 +121,6 @@ class GroupededClassificationEvaluator(Evaluator):
             self.all_positives.clear()
             self.all_scores.clear()
             self.index_group.clear()
-            self.eval_triples.clear()
             self.targets.clear()
         else:
             result = GroupedMetricResults({})
