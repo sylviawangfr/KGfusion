@@ -73,6 +73,27 @@ class GroupededClassificationEvaluator(Evaluator):
             self.all_scores[key] = scores[i]
             self.all_positives[key] = dense_positive_mask[i]
 
+    def _get_group_scores_and_positives(self, g_triples, tmp_targets):
+        g_scores = {}
+        g_positives = {}
+        for target in tmp_targets:
+            remaining = [i for i in range(g_triples.shape[1]) if i != TARGET_TO_INDEX[target]]
+            keys = g_triples[:, remaining]
+            # Ensure that each key gets counted only once
+            for i in range(keys.shape[0]):
+                # include head_side flag into key to differentiate between (h, r) and (r, t)
+                key_suffix = tuple(map(int, keys[i]))
+                assert len(key_suffix) == 2
+                key_suffix = cast(Tuple[int, int], key_suffix)
+                key = (target,) + key_suffix
+                g_scores.update({key: self.all_scores[key]})
+                g_positives.update({key: self.all_positives[key]})
+        tmp_keys = list(g_scores.keys())
+        g_y_score = np.concatenate([g_scores[k] for k in tmp_keys], axis=0).flatten()
+        g_y_true = np.concatenate([g_positives[k] for k in tmp_keys], axis=0).flatten()
+        tmp_result = ClassificationMetricResults.from_scores(g_y_true, g_y_score)
+        return tmp_result.data['f1_score']
+
     # docstr-coverage: inherited
     def finalize(self) -> GroupedMetricResults:  # noqa: D102
         # Because the order of the values of an dictionary is not guaranteed,
@@ -84,24 +105,14 @@ class GroupededClassificationEvaluator(Evaluator):
             # y_true = np.concatenate([self.all_positives[k] for k in all_keys], axis=0).flatten()
             for g_index in self.index_group:
                 g_triples = self.eval_triples[g_index, :]
-                g_scores = []
-                g_positives = []
-                for target in self.targets:
-                    remaining = [i for i in range(g_triples.shape[1]) if i != TARGET_TO_INDEX[target]]
-                    keys = g_triples[:, remaining]
-                    # Ensure that each key gets counted only once
-                    for i in range(keys.shape[0]):
-                        # include head_side flag into key to differentiate between (h, r) and (r, t)
-                        key_suffix = tuple(map(int, keys[i]))
-                        assert len(key_suffix) == 2
-                        key_suffix = cast(Tuple[int, int], key_suffix)
-                        key = (target,) + key_suffix
-                        g_scores.append(self.all_scores[key])
-                        g_positives.append(self.all_positives[key])
-                g_y_score = np.concatenate(g_scores, axis=0).flatten()
-                g_y_true = np.concatenate(g_positives, axis=0).flatten()
-                tmp_result = ClassificationMetricResults.from_scores(g_y_true, g_y_score)
-                all_f1.append(tmp_result.data['f1_score'])
+                if len(self.targets) == 2:
+                    g_f1 = []
+                    for t in self.targets:
+                        g_f1.append(self._get_group_scores_and_positives(g_triples, [t]))
+                    g_f1.append(self._get_group_scores_and_positives(g_triples, self.targets))
+                    all_f1.append(g_f1)
+                else:
+                    all_f1.append(self._get_group_scores_and_positives(g_triples, self.targets))
             ts_all_f1 = torch.as_tensor(all_f1)
             return GroupedMetricResults({'f1': ts_all_f1})
         else:
