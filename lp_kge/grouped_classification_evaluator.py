@@ -115,12 +115,6 @@ class GroupededClassificationEvaluator(Evaluator):
                     all_f1.append(self._get_group_scores_and_positives(g_triples, self.targets))
             ts_all_f1 = torch.as_tensor(all_f1)
             result = GroupedMetricResults({'f1': ts_all_f1})
-            # Clear buffers
-            self.all_positives.clear()
-            self.all_scores.clear()
-            self.index_group.clear()
-            self.eval_triples.clear()
-            self.targets.clear()
         else:
             result = GroupedMetricResults({})
         return result
@@ -130,5 +124,6 @@ class GroupededClassificationEvaluator(Evaluator):
         self.eval_triples = mapped_triples
         self.targets = targets
         return self
+
 
 
