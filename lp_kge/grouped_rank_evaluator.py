@@ -22,7 +22,7 @@ def _flatten(nested: Mapping[K, Sequence[np.ndarray]]) -> Mapping[K, np.ndarray]
 
 
 def _select_index(nested: Mapping[K, np.ndarray], index: np.ndarray) -> Mapping[K, np.ndarray]:
-    return {key: [value[list(index)]] for key, value in nested.items()}
+    return {key: [[value[i] for i in list(index) if i < len(value)]] for key, value in nested.items()}
 
 
 def _iter_ranks2(
@@ -86,6 +86,8 @@ class GroupedRankBasedEvaluator(Evaluator):
         super().__init__(
             filtered=filtered,
             requires_positive_mask=False,
+            batch_size=32,
+            automatic_memory_optimization=False,
             **kwargs,
         )
         self.metrics = rank_based_metric_resolver.make_many(['hitsatk'], [{'k': 10}])
