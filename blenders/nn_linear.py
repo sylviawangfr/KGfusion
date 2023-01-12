@@ -155,7 +155,7 @@ def get_MLP(keyword='2'):
 
 
 def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
-    dataset_cls = get_features_clz(para['sampler'])
+    dataset_cls = get_features_clz(para['features'])
     train_data = dataset_cls(mapped_triples, context_resource, all_pos_triples,
                                                   num_neg=para['num_neg'])
     train_dataloader = DataLoader(train_data, batch_size=para['batch_size'], shuffle=True, collate_fn=train_data.collate_train)
@@ -243,17 +243,27 @@ class NNLinearBlender(Blender):
         # 3. aggregate scores for testing
         result = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
         str_re = format_result(result)
-        save_to_file(str_re, self.params['work_dir'] + '_'.join(self.params['models']) + "_nn.log")
-        print(str_re)
+        option_str = f"{self.params['dataset']}_" \
+                     f"{'_'.join(self.params['models'])}_" \
+                     f"feature{self.params['features']}_" \
+                     f"nn_{self.params['loss']}"
+        save_to_file(str_re, self.params['work_dir'] + f"{option_str}.log")
+        print(f"{option_str}:\n{str_re}")
         if self.params['mlflow']:
             mlflow.log_param('result', str_re)
 
 
 if __name__ == '__main__':
+    # features
+    # 1: PerRelDataset,
+    # 2: PerRelBothDataset,
+    # 3: ScoresOnlyDataset,
+    # 4: PerEntDataset,
+    # 5: PerRelEntDataset
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--sampler', type=int, default=3)
+    parser.add_argument('--features', type=int, default=3)
     parser.add_argument('--linear', type=str, default="1")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument("--lr", type=float, default=0.001)
