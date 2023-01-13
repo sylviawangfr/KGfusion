@@ -259,9 +259,9 @@ def train_multi_models(params):
         func_name = 'train_' + m
         pipeline_result = globals()[func_name](dataset)
         pipeline_result.save_to_directory(work_dir + m + "/checkpoint/", save_metadata=True)
-        if 'NodePiece' in m:
-            pipeline_result.entity_representations[0].base[0].save_assignment(
-                Path(work_dir + m + "/checkpoint/anchors_assignment.pt"))
+        # if 'NodePiece' in m:
+        #     pipeline_result.entity_representations[0].base[0].save_assignment(
+        #         Path(work_dir + m + "/checkpoint/anchors_assignment.pt"))
 
 
 if __name__ == '__main__':
