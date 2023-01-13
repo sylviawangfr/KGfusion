@@ -174,7 +174,9 @@ def train_NodePiece(dataset):
     #                     save_replicates=False,
     #                     save_training=False)
     path = normalize_path("galkin2022_nodepiece_fb15k237.yaml")
-    pipeline_results = pipeline_from_config(config=load_configuration(path))
+    config = load_configuration(path)
+    config['pipeline']['dataset'] = dataset
+    pipeline_results = pipeline_from_config(config=config)
     return pipeline_results
 
 
@@ -202,47 +204,47 @@ class DeepSet(torch.nn.Module):
         return x
 
 
-def train_NodePiece2(dataset):
-    result = pipeline(
-        dataset=dataset,
-        dataset_kwargs=dict(
-            create_inverse_triples=True,
-        ),
-        model=NodePiece,
-        model_kwargs=dict(
-            tokenizers=["AnchorTokenizer", "RelationTokenizer"],
-            num_tokens=[20, 12],
-            tokenizers_kwargs=[
-                dict(
-                    selection="MixtureAnchorSelection",
-                    selection_kwargs=dict(
-                        selections=["degree", "pagerank", "random"],
-                        ratios=[0.4, 0.4, 0.2],
-                        num_anchors=500,
-                    ),
-                    searcher="ScipySparse",
-                ),
-                dict(),  # empty dict for the RelationTokenizer - it doesn't need any kwargs
-            ],
-            embedding_dim=64,
-            interaction="rotate",
-            relation_initializer="init_phases",
-            relation_constrainer="complex_normalize",
-            entity_initializer="xavier_uniform_",
-            aggregation=DeepSet(hidden_dim=64),
-        ),
-        loss=BCEWithLogitsLoss,
-        loss_kwargs=dict(reduction='mean'),
-        optimizer="Adam",
-        optimizer_kwargs=dict(
-            lr=0.0005),
-        training_kwargs=dict(
-                batch_size=512,
-                num_epochs=401,
-                label_smoothing=0.4),
-        training_loop='LCWA'
-    )
-    return result
+# def train_NodePiece2(dataset):
+#     result = pipeline(
+#         dataset=dataset,
+#         dataset_kwargs=dict(
+#             create_inverse_triples=True,
+#         ),
+#         model=NodePiece,
+#         model_kwargs=dict(
+#             tokenizers=["AnchorTokenizer", "RelationTokenizer"],
+#             num_tokens=[20, 12],
+#             tokenizers_kwargs=[
+#                 dict(
+#                     selection="MixtureAnchorSelection",
+#                     selection_kwargs=dict(
+#                         selections=["degree", "pagerank", "random"],
+#                         ratios=[0.4, 0.4, 0.2],
+#                         num_anchors=500,
+#                     ),
+#                     searcher="ScipySparse",
+#                 ),
+#                 dict(),  # empty dict for the RelationTokenizer - it doesn't need any kwargs
+#             ],
+#             embedding_dim=64,
+#             interaction="rotate",
+#             relation_initializer="init_phases",
+#             relation_constrainer="complex_normalize",
+#             entity_initializer="xavier_uniform_",
+#             aggregation=DeepSet(hidden_dim=64),
+#         ),
+#         loss=BCEWithLogitsLoss,
+#         loss_kwargs=dict(reduction='mean'),
+#         optimizer="Adam",
+#         optimizer_kwargs=dict(
+#             lr=0.0005),
+#         training_kwargs=dict(
+#                 batch_size=512,
+#                 num_epochs=401,
+#                 label_smoothing=0.4),
+#         training_loop='LCWA'
+#     )
+#     return result
 
 
 def train_multi_models(params):
@@ -264,7 +266,7 @@ def train_multi_models(params):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
+    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE_NodePiece")
     # parser.add_argument('--models', type=str, default="NodePiece")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="outputs/umls/")

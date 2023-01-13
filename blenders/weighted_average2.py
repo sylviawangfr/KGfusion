@@ -34,7 +34,7 @@ class WeightedAverageBlender2(Blender):
         all_pos = get_all_pos_triples(self.dataset)
         test_data_feature = PerRelEntDataset(mapped_triples, self.context, all_pos)
         rel_eval_feature, ent_rel_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 3, 1)
-        eval_balanced = self._p1(rel_eval_feature, ent_rel_feature)
+        eval_balanced = self._p2(rel_eval_feature, ent_rel_feature)
         eval_mul_score = torch.sum(torch.mul(eval_balanced, score_feature), 1)
         tmp_evl_sum = torch.sum(eval_balanced, 1)
         tmp_evl_sum[tmp_evl_sum == 0] = 0.5  # do not divided by zero
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--evaluator_key', type=str, default="f1")
+    parser.add_argument('--evaluator_key', type=str, default="rank")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})

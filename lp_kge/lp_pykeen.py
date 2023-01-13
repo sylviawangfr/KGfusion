@@ -362,7 +362,6 @@ class LpKGE:
             evaluator_cls = get_evaluator_cls(evaluator_key)
             evaluator = evaluator_cls()
             evaluator.set_groups(ordered_group_index, mapped_triples_eval, [LABEL_HEAD, LABEL_TAIL])
-            # kwargs.update({"targets": [t]})
             metrix_result = evaluator.evaluate(single_model, mapped_triples_eval, **evaluation_kwargs)
             rel_evals = metrix_result.data[evaluator_key]
             torch.save(rel_evals, m_out_dir + f"{evaluator_key}_rel_eval.pt")
@@ -380,29 +379,29 @@ class LpKGE:
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
         evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training)}
-        evaluator_fun = get_evaluator_cls(evaluator_key)
+        evaluator_cls = get_evaluator_cls(evaluator_key)
         for m in self.models:
             m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
             m_out_dir = self.work_dir + m + "/"
             single_model = torch.load(m_dir)
             single_model = single_model.to(device)
-            ordered_group_index = []
+            h_ordered_group_index = []
+            t_ordered_group_index = []
             for key in h_ent_keys:
                 g = h_groups.get_group(key)
                 g_index = torch.from_numpy(g.index.values)
-                ordered_group_index.append(g_index)
+                h_ordered_group_index.append(g_index)
             evaluation_kwargs.update({"targets": [LABEL_TAIL]})
-            evaluator_cls = get_evaluator_cls(evaluator_key)
             evaluator1 = evaluator_cls()
-            evaluator1.set_groups(ordered_group_index, mapped_triples_eval, [LABEL_TAIL])
+            evaluator1.set_groups(h_ordered_group_index, mapped_triples_eval, [LABEL_TAIL])
             h_ent_eval = evaluator1.evaluate(single_model, mapped_triples_eval, **evaluation_kwargs)
             for key in t_ent_keys:
                 g = t_groups.get_group(key)
                 g_index = torch.from_numpy(g.index.values)
-                ordered_group_index.append(g_index)
+                t_ordered_group_index.append(g_index)
             evaluation_kwargs.update({"targets": [LABEL_HEAD]})
             evaluator2 = evaluator_cls()
-            evaluator2.set_groups(ordered_group_index, mapped_triples_eval, [LABEL_HEAD])
+            evaluator2.set_groups(t_ordered_group_index, mapped_triples_eval, [LABEL_HEAD])
             t_ent_eval = evaluator2.evaluate(single_model, mapped_triples_eval, **evaluation_kwargs)
             torch.save(h_ent_eval.data[evaluator_key], m_out_dir + f"{evaluator_key}_h_ent_eval.pt")
             torch.save(t_ent_eval.data[evaluator_key], m_out_dir + f"{evaluator_key}_t_ent_eval.pt")
@@ -492,9 +491,9 @@ if __name__ == '__main__':
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     eval_key = param1['evaluator_key']
-    pykeen_lp.dev_rel_eval(eval_key)
+    # pykeen_lp.dev_rel_eval(eval_key)
     pykeen_lp.dev_ent_eval(eval_key)
-    pykeen_lp.dev_mapping_eval(eval_key)
-    pykeen_lp.dev_pred(top_k=100)
-    pykeen_lp.test_pred()
+    # pykeen_lp.dev_mapping_eval(eval_key)
+    # pykeen_lp.dev_pred(top_k=100)
+    # pykeen_lp.test_pred()
 
