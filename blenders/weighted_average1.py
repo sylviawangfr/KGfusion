@@ -79,7 +79,7 @@ if __name__ == '__main__':
     # "3": ScoresOnlyDataset,
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
-    parser.add_argument('--features', type=int, default=4)  # 1, 2, 4
+    parser.add_argument('--features', type=int, default=1)  # 1, 2, 4
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_'), "rel_mapping": args.rel_mapping == 'True'})
