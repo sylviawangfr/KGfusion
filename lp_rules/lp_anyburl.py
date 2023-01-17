@@ -9,6 +9,7 @@ from pykeen.datasets import FB15k237, UMLS, get_dataset
 
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir
 from lp_kge.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples, find_relation_mappings
+from utils import save2json
 
 
 def read_hrt_pred_anyburl(anyburl_dir, snapshot=100, top_k=10):
@@ -78,7 +79,6 @@ def to_fusion_test_format(dataset, file_triples: [], pred_index, pred_scores, ou
 def per_rel_eval(mapped_triples, file_triples: [], pred_index, out_dir):
     tri_df = pd.DataFrame(data=file_triples, columns=['h', 'r', 't'])
     pred_rel_groups = tri_df.groupby('r', group_keys=True, as_index=False)
-    hit_positions = [1, 3, 10]
     triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
     original_groups = triples_df.groupby('r', group_keys=True, as_index=False)
     ordered_keys = original_groups.groups.keys()
@@ -101,7 +101,48 @@ def per_rel_eval(mapped_triples, file_triples: [], pred_index, out_dir):
                                   tail_hits,
                                   both_hit])
     head_tail_mrr = torch.Tensor(head_tail_mrr)
-    torch.save(head_tail_mrr, out_dir + "rel_eval.pt")
+    torch.save(head_tail_mrr, out_dir + "rank_rel_eval.pt")
+
+
+def per_ent_eval(mapped_triples, file_triples: [], pred_index, out_dir):
+    original_triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
+    original_groups_h = original_triples_df.groupby('h', group_keys=True, as_index=False)
+    original_groups_t = original_triples_df.groupby('t', group_keys=True, as_index=False)
+    ordered_keys_h = original_groups_h.groups.keys()
+    ordered_keys_t = original_groups_t.groups.keys()
+    triples_df = pd.DataFrame(data=file_triples, columns=['h', 'r', 't'])
+    h_groups = triples_df.groupby('h', group_keys=True, as_index=False)
+    h_ent2idx = {key: idx for idx, key in enumerate(ordered_keys_h)}
+    t_groups = triples_df.groupby('t', group_keys=True, as_index=False)
+    t_ent2idx = {key: idx for idx, key in enumerate(ordered_keys_t)}
+    h_ent_eval = []
+    t_ent_eval = []
+    for h in ordered_keys_h:
+        if h not in h_groups.groups.keys():
+            h_ent_eval.append(0)
+        else:
+            rg_tris = h_groups.get_group(h)
+            rg_index = torch.as_tensor(rg_tris.index)
+            h_preds, t_preds = pred_index[rg_index].chunk(2, 1)
+            t_preds = t_preds.squeeze(1)
+            tails = torch.as_tensor(rg_tris['t'].values).unsqueeze(1)
+            tail_hits = calc_hit_at_10(t_preds, tails)
+            h_ent_eval.append(tail_hits)
+    for t in ordered_keys_t:
+        if t not in t_groups.groups.keys():
+            t_ent_eval.append(0)
+        else:
+            rg_tris = t_groups.get_group(t)
+            rg_index = torch.as_tensor(rg_tris.index)
+            h_preds, t_preds = pred_index[rg_index].chunk(2, 1)
+            h_preds = h_preds.squeeze(1)
+            heads = torch.as_tensor(rg_tris['h'].values).unsqueeze(1)
+            head_hits = calc_hit_at_10(h_preds, heads)
+            t_ent_eval.append(head_hits)
+    torch.save(torch.Tensor(h_ent_eval), out_dir + "rank_h_ent_eval.pt")
+    torch.save(torch.Tensor(t_ent_eval), out_dir + "rank_t_ent_eval.pt")
+    save2json(h_ent2idx, out_dir + "rank_h_ent2idx.json")
+    save2json(t_ent2idx, out_dir + "rank_t_ent2idx.json")
 
 
 def per_mapping_eval(dataset, file_triples: [], pred_index, out_dir):
@@ -128,7 +169,7 @@ def per_mapping_eval(dataset, file_triples: [], pred_index, out_dir):
         else:
             head_tail_mrr.append([0.01, 0.01, 0.01])
     head_tail_mrr = torch.Tensor(head_tail_mrr)
-    torch.save(head_tail_mrr, out_dir + "mapping_eval.pt")
+    torch.save(head_tail_mrr, out_dir + "rank_mapping_rel_eval.pt")
 
 
 def calc_hit_at_10(pred_idx, ground_truth_idx):
@@ -241,6 +282,7 @@ class LpAnyBURL:
         to_fusion_eval_format(self.dataset, file_triples, pred_index, pred_scores, all_pos_triples, self.work_dir, top_k)
         per_rel_eval(self.dataset.validation.mapped_triples, file_triples, pred_index, self.work_dir)
         per_mapping_eval(dataset=self.dataset, file_triples=file_triples, pred_index=pred_index, out_dir=self.work_dir)
+        per_ent_eval(self.dataset.validation.mapped_triples, file_triples, pred_index, self.work_dir)
 
     def test_pred(self, snapshot, top_k):
         clean_anyburl_tmp_files(self.work_dir)
@@ -248,7 +290,6 @@ class LpAnyBURL:
         predict_with_anyburl(self.work_dir, snapshot=snapshot)
         file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, snapshot=snapshot, top_k=top_k)
         to_fusion_test_format(self.dataset, file_triples, pred_index, pred_scores, self.work_dir)
-
 
 
 if __name__ == "__main__":

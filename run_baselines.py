@@ -266,8 +266,8 @@ def train_multi_models(params):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE_NodePiece")
-    # parser.add_argument('--models', type=str, default="NodePiece")
+    # parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE_NodePiece")
+    parser.add_argument('--models', type=str, default="NodePiece")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="outputs/umls/")
     args = parser.parse_args()
