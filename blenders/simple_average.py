@@ -14,7 +14,6 @@ class SimpleAverageBlender(Blender):
         super().__init__(params)
         self.context = load_score_context(self.params['models'],
                                           in_dir=params['work_dir'],
-                                          evaluator_key=params['evaluator_key'],
                                           rel_mapping=params['rel_mapping']
                                           )
 
@@ -42,7 +41,7 @@ class SimpleAverageBlender(Blender):
         result = evaluator.finalize()
         str_re = format_result(result)
         option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
-                     f"{self.params['evaluator_key']}_simple_avg"
+                     "simple_avg"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -53,7 +52,6 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--evaluator_key', type=str, default="rank")
     parser.add_argument('--rel_mapping', type=str, default='False')
     args = parser.parse_args()
     param1 = args.__dict__
