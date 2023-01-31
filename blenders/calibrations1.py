@@ -13,7 +13,7 @@ from common_utils import format_result, save_to_file
 logger = logging.getLogger(__name__)
 
 
-class PlattScalingBlender(Blender):
+class PlattScalingBlender1(Blender):
     def __init__(self, params):
         super().__init__(params)
         self.context = load_score_context(self.params['models'],
@@ -29,7 +29,7 @@ class PlattScalingBlender(Blender):
                                                 all_pos_triples,
                                                 num_neg=self.params['num_neg'])
         test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
-        logistic = LogisticCalibration(method='mle', detection=True, )
+        logistic = LogisticCalibration(method='momentum', detection=True, )
         # detection : bool, default: False
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
@@ -71,5 +71,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
-    wab = PlattScalingBlender(param1)
+    wab = PlattScalingBlender1(param1)
     wab.aggregate_scores()
