@@ -12,7 +12,8 @@ from blender_utils import restore_eval_format, Blender
 from common_utils import format_result, save_to_file
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.DEBUG)
 
 
 class PlattScalingBlender2(Blender):
