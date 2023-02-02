@@ -1,4 +1,5 @@
 import argparse
+import gc
 import logging
 import torch
 from netcal.scaling import LogisticCalibration
@@ -43,6 +44,8 @@ class PlattScalingBlender2(Blender):
         if torch.cuda.is_available():
             use_cuda = True
         for m in model_features:
+            gc.collect()
+            torch.cuda.empty_cache()
             logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True, use_cuda=use_cuda)
             logistic.fit(m.numpy(), labels)
             logistics.append(logistic)
