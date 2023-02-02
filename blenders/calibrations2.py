@@ -41,6 +41,7 @@ class PlattScalingBlender2(Blender):
         model_num = inputs.shape[1]
         model_features = torch.chunk(inputs, model_num, 1)
         logistics = []
+        use_cuda = False
         if torch.cuda.is_available():
             use_cuda = True
         for m in model_features:
