@@ -12,6 +12,7 @@ from blender_utils import restore_eval_format, Blender
 from common_utils import format_result, save_to_file
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class PlattScalingBlender2(Blender):
@@ -42,13 +43,15 @@ class PlattScalingBlender2(Blender):
         model_features = torch.chunk(inputs, model_num, 1)
         logistics = []
         use_cuda = torch.cuda.is_available()
+        logger.debug(f"use cuda: {use_cuda}")
         for m in model_features:
-            gc.collect()
-            torch.cuda.empty_cache()
-            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True, use_cuda=use_cuda)
+            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
+                                           use_cuda=use_cuda, vi_epochs=500)
             logistic.fit(m.numpy(), labels)
             logistics.append(logistic)
-
+        gc.collect()
+        if use_cuda:
+            torch.cuda.empty_cache()
         pred_features = test_feature_dataset.get_all_test_examples()
         pred_features = torch.chunk(pred_features, model_num, 1)
         ens_logits = []
