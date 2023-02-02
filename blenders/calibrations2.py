@@ -40,8 +40,10 @@ class PlattScalingBlender2(Blender):
         model_num = inputs.shape[1]
         model_features = torch.chunk(inputs, model_num, 1)
         logistics = []
+        if torch.cuda.is_available():
+            use_cuda = True
         for m in model_features:
-            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,)
+            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True, use_cuda=use_cuda)
             logistic.fit(m.numpy(), labels)
             logistics.append(logistic)
 
