@@ -50,9 +50,9 @@ class PlattScalingBlender2(Blender):
                                            use_cuda=use_cuda, vi_epochs=500)
             logistic.fit(m.numpy(), labels)
             logistics.append(logistic)
-        gc.collect()
-        if use_cuda:
-            torch.cuda.empty_cache()
+            gc.collect()
+            if use_cuda:
+                torch.cuda.empty_cache()
         pred_features = test_feature_dataset.get_all_test_examples()
         pred_features = torch.chunk(pred_features, model_num, 1)
         ens_logits = []
