@@ -42,23 +42,20 @@ class PlattScalingBlender2(Blender):
                             torch.zeros(neg.shape[0], 1)], 0).numpy()
         model_num = inputs.shape[1]
         model_features = torch.chunk(inputs, model_num, 1)
-        logistics = []
         use_cuda = torch.cuda.is_available()
         logger.debug(f"use cuda: {use_cuda}")
-        for m in model_features:
-            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
-                                           use_cuda=use_cuda, vi_epochs=500)
-            logistic.fit(m.numpy(), labels)
-            logistics.append(logistic)
-            gc.collect()
-            if use_cuda:
-                torch.cuda.empty_cache()
         pred_features = test_feature_dataset.get_all_test_examples()
         pred_features = torch.chunk(pred_features, model_num, 1)
         ens_logits = []
-        for index, logistic in enumerate(logistics):
+        for index, m in enumerate(model_features):
+            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
+                                           use_cuda=use_cuda, vi_epochs=500)
+            logistic.fit(m.numpy(), labels)
             individual_cali = logistic.transform(pred_features[index].numpy())
             ens_logits.append(torch.from_numpy(individual_cali))
+            gc.collect()
+            if use_cuda:
+                torch.cuda.empty_cache()
         ens_logits = torch.mean(torch.vstack(ens_logits), 0)
         h_preds, t_preds = torch.chunk(ens_logits, 2, 0)
         # restore format that required by pykeen evaluator
