@@ -34,7 +34,7 @@ class WeightedAverageBlender1(Blender):
                                           in_dir=params['work_dir'],
                                           evaluator_key=params['evaluator_key'],
                                           rel_mapping=params['rel_mapping'],
-                                          calibration=params['cali']=="True"
+                                          calibration=params['cali']=="False"
                                           )
 
     def aggregate_scores(self):
