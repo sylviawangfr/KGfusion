@@ -33,7 +33,8 @@ class WeightedAverageBlender1(Blender):
         self.context = load_score_context(self.params['models'],
                                           in_dir=params['work_dir'],
                                           evaluator_key=params['evaluator_key'],
-                                          rel_mapping=params['rel_mapping']
+                                          rel_mapping=params['rel_mapping'],
+                                          calibration=params['cali']=="True"
                                           )
 
     def aggregate_scores(self):
@@ -80,6 +81,7 @@ if __name__ == '__main__':
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
     parser.add_argument('--features', type=int, default=2)  # 1, 2, 4
+    parser.add_argument("--cali", type=str, default="True")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_'), "rel_mapping": args.rel_mapping == 'True'})

@@ -5,7 +5,7 @@ import utils
 logger = logging.getLogger(__name__)
 
 
-def load_score_context(model_list, in_dir, evaluator_key=None, rel_mapping=None):
+def load_score_context(model_list, in_dir, calibration=False, evaluator_key=None, rel_mapping=None):
     if rel_mapping:
         rel_eval_filename = "mapping_rel_eval.pt"
         releval2idx_filename = "mapping_releval2idx.json"
@@ -19,11 +19,15 @@ def load_score_context(model_list, in_dir, evaluator_key=None, rel_mapping=None)
         eval_pos_scores = torch.load(read_dir + "eval_pos_scores.pt")
         eval_neg_scores = torch.load(read_dir + "eval_neg_scores.pt")
         eval_neg_index = torch.load(read_dir + "eval_neg_index.pt")
-        preds = torch.load(read_dir + "preds.pt")
+        if calibration:
+            preds = torch.load(read_dir + "cali_preds.pt")
+        else:
+            preds = torch.load(read_dir + "preds.pt")
         context_resource[m] = {'eval_pos_scores': eval_pos_scores,
                                'eval_neg_scores': eval_neg_scores,
                                'eval_neg_index': eval_neg_index,
                                'preds': preds}
+
         if evaluator_key is not None:
             rel_eval = torch.load(read_dir + f"{evaluator_key}_{rel_eval_filename}")
             h_ent_eval = torch.load(read_dir + f"{evaluator_key}_h_ent_eval.pt")

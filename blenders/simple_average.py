@@ -14,7 +14,8 @@ class SimpleAverageBlender(Blender):
         super().__init__(params)
         self.context = load_score_context(self.params['models'],
                                           in_dir=params['work_dir'],
-                                          rel_mapping=params['rel_mapping']
+                                          rel_mapping=params['rel_mapping'],
+                                          calibration=params['cali']=="True"
                                           )
 
     def aggregate_scores(self):
@@ -53,6 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--rel_mapping', type=str, default='False')
+    parser.add_argument("--cali", type=str, default="True")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_'), "rel_mapping": args.rel_mapping == 'True'})
