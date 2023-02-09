@@ -64,6 +64,10 @@ class PlattScalingIndividual():
             t_preds = torch.reshape(t_preds, (old_shape[0], int(old_shape[1]/2)))
             individual_cali = torch.cat([h_preds, t_preds], 1)
             torch.save(individual_cali, self.work_dir + f"{model_name}/cali_preds.pt")
+            del logistic
+            del h_preds
+            del t_preds
+            del individual_cali
             gc.collect()
             if use_cuda:
                 torch.cuda.empty_cache()
