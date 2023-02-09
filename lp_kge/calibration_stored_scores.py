@@ -58,7 +58,7 @@ class PlattScalingIndividual():
             logistic.fit(m.numpy(), labels)
             # individual_cali = logistic.transform(pred_features[index].numpy(), mean_estimate=True)
             logger.info(f"Start transforming {self.model_list[index]}.")
-            individual_cali = logistic.transform(pred_features[index].numpy()).mean(0)
+            individual_cali = logistic.transform(pred_features[index].numpy(), num_samples=100).mean(0)
             old_shape = self.context[model_name]['preds'].shape
             h_preds, t_preds = torch.chunk(torch.from_numpy(individual_cali), 2, 0)
             h_preds = torch.reshape(h_preds, (old_shape[0], int(old_shape[1]/2)))
