@@ -57,6 +57,7 @@ class PlattScalingIndividual():
                                            use_cuda=use_cuda, vi_epochs=500)
             logistic.fit(m.numpy(), labels)
             # individual_cali = logistic.transform(pred_features[index].numpy(), mean_estimate=True)
+            logger.info(f"Start transforming {self.model_list[index]}.")
             individual_cali = logistic.transform(pred_features[index].numpy()).mean(0)
             old_shape = self.context[model_name]['preds'].shape
             h_preds, t_preds = torch.chunk(torch.from_numpy(individual_cali), 2, 0)
@@ -64,6 +65,7 @@ class PlattScalingIndividual():
             t_preds = torch.reshape(t_preds, (old_shape[0], int(old_shape[1]/2)))
             individual_cali = torch.cat([h_preds, t_preds], 1)
             torch.save(individual_cali, self.work_dir + f"{model_name}/cali_preds.pt")
+            logger.info(f"Transforming saved for {self.model_list[index]}.")
             del logistic
             del h_preds
             del t_preds
