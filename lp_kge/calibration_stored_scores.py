@@ -1,16 +1,14 @@
 import argparse
 import gc
 import logging
-
-import numpy as np
 import torch
 from netcal.scaling import LogisticCalibration
 from pykeen.datasets import get_dataset
-from pykeen.evaluation import RankBasedEvaluator
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
-from common_utils import format_result, save_to_file
 from lp_kge.lp_pykeen import get_all_pos_triples
 
 logger = logging.getLogger(__name__)
@@ -55,12 +53,23 @@ class PlattScalingIndividual():
             model_name = self.model_list[index]
             logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
                                            use_cuda=use_cuda, vi_epochs=500)
+            gc.collect()
+            if use_cuda:
+                torch.cuda.empty_cache()
             logistic.fit(m.numpy(), labels)
+            old_shape = self.context[model_name]['preds'].shape
             # individual_cali = logistic.transform(pred_features[index].numpy(), mean_estimate=True)
             logger.info(f"Start transforming {self.model_list[index]}.")
-            individual_cali = logistic.transform(pred_features[index].numpy(), num_samples=100).mean(0)
-            old_shape = self.context[model_name]['preds'].shape
-            h_preds, t_preds = torch.chunk(torch.from_numpy(individual_cali), 2, 0)
+            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=100 * old_shape[1])
+            individual_cali = []
+            for batch in tqdm(m_test_dataloader):
+                batch_individual_cali = logistic.transform(batch.numpy(), num_samples=100).mean(0)
+                individual_cali.extend(batch_individual_cali)
+                gc.collect()
+                if use_cuda:
+                    torch.cuda.empty_cache()
+
+            h_preds, t_preds = torch.chunk(torch.as_tensor(individual_cali), 2, 0)
             h_preds = torch.reshape(h_preds, (old_shape[0], int(old_shape[1]/2)))
             t_preds = torch.reshape(t_preds, (old_shape[0], int(old_shape[1]/2)))
             individual_cali = torch.cat([h_preds, t_preds], 1)
