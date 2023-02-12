@@ -254,39 +254,68 @@ def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k
     return neg_scores, neg_index
 
 
+# def find_relation_mappings(dataset: pykeen.datasets.Dataset):
+#     all_triples = torch.cat([dataset.training.mapped_triples,
+#                              dataset.validation.mapped_triples,
+#                              dataset.testing.mapped_triples], 0)
+#     df = pd.DataFrame(data=all_triples.numpy(), columns=['h', 'r', 't'])
+#     del all_triples
+#     hr = df[['h', 'r']]
+#     possible_one_to_many_rel = hr[hr.duplicated()][['r']].drop_duplicates(keep='first')
+#     tmp_r1 = hr[['r']].drop_duplicates(keep='first')
+#     possible_one2one_1 = pd.concat([tmp_r1, possible_one_to_many_rel]).drop_duplicates(keep=False)
+#     rt = df[['r', 't']]
+#     del df
+#     possible_many_to_one_rel = rt[rt.duplicated()][['r']].drop_duplicates(keep='first')
+#     tmp_r2 = rt[['r']].drop_duplicates(keep='first')
+#     possible_one2one_2 = pd.concat([tmp_r2, possible_many_to_one_rel]).drop_duplicates(keep=False)
+#     many_to_many_rel = pd.concat([possible_one_to_many_rel, possible_many_to_one_rel])
+#     many_to_many_rel = many_to_many_rel[many_to_many_rel.duplicated()]
+#     one_to_one_rel = pd.concat([possible_one2one_1, possible_one2one_2])
+#     one_to_one_rel = one_to_one_rel[one_to_one_rel.duplicated()]
+#     one_to_many_rel = pd.concat([possible_one_to_many_rel, many_to_many_rel]).drop_duplicates(keep=False)
+#     many_to_one_rel = pd.concat([possible_many_to_one_rel, many_to_many_rel]).drop_duplicates(keep=False)
+#     all_count = len(one_to_one_rel.index) + \
+#                 len(one_to_many_rel.index) + \
+#                 len(many_to_one_rel.index) + \
+#                 len(many_to_many_rel.index)
+#     assert(all_count == dataset.num_relations)
+#     rel_groups = {'one_to_one': one_to_one_rel['r'].values,
+#                   'one_to_many': one_to_many_rel['r'].values,
+#                   'many_to_one': many_to_one_rel['r'].values,
+#                   'many_to_many': many_to_many_rel['r'].values}
+#     del hr
+#     del rt
+#     gc.collect()
+#     return rel_groups
+
 def find_relation_mappings(dataset: pykeen.datasets.Dataset):
     all_triples = torch.cat([dataset.training.mapped_triples,
                              dataset.validation.mapped_triples,
                              dataset.testing.mapped_triples], 0)
     df = pd.DataFrame(data=all_triples.numpy(), columns=['h', 'r', 't'])
     del all_triples
-    hr = df[['h', 'r']]
-    possible_one_to_many_rel = hr[hr.duplicated()][['r']].drop_duplicates(keep='first')
-    tmp_r1 = hr[['r']].drop_duplicates(keep='first')
-    possible_one2one_1 = pd.concat([tmp_r1, possible_one_to_many_rel]).drop_duplicates(keep=False)
-    rt = df[['r', 't']]
-    del df
-    possible_many_to_one_rel = rt[rt.duplicated()][['r']].drop_duplicates(keep='first')
-    tmp_r2 = rt[['r']].drop_duplicates(keep='first')
-    possible_one2one_2 = pd.concat([tmp_r2, possible_many_to_one_rel]).drop_duplicates(keep=False)
-    many_to_many_rel = pd.concat([possible_one_to_many_rel, possible_many_to_one_rel])
-    many_to_many_rel = many_to_many_rel[many_to_many_rel.duplicated()]
-    one_to_one_rel = pd.concat([possible_one2one_1, possible_one2one_2])
-    one_to_one_rel = one_to_one_rel[one_to_one_rel.duplicated()]
-    one_to_many_rel = pd.concat([possible_one_to_many_rel, many_to_many_rel]).drop_duplicates(keep=False)
-    many_to_one_rel = pd.concat([possible_many_to_one_rel, many_to_many_rel]).drop_duplicates(keep=False)
-    all_count = len(one_to_one_rel.index) + \
-                len(one_to_many_rel.index) + \
-                len(many_to_one_rel.index) + \
-                len(many_to_many_rel.index)
-    assert(all_count == dataset.num_relations)
-    rel_groups = {'one_to_one': one_to_one_rel['r'].values,
-                  'one_to_many': one_to_many_rel['r'].values,
-                  'many_to_one': many_to_one_rel['r'].values,
-                  'many_to_many': many_to_many_rel['r'].values}
-    del hr
-    del rt
-    gc.collect()
+    hr2t = df.groupby(['h', 'r'], group_keys=True, as_index=False)['t'].nunique()
+    hr2t_1 = hr2t.groupby('r', group_keys=True, as_index=False)['t'].sum()
+    hr2t_2 = hr2t.groupby('r', group_keys=True, as_index=False)['h'].nunique()
+
+    rt2h = df.groupby(['r', 't'], group_keys=True, as_index=False)['h'].nunique()
+    rt2h_1 = rt2h.groupby('r', group_keys=True, as_index=False)['h'].sum()
+    rt2h_2 = rt2h.groupby('r', group_keys=True, as_index=False)['t'].nunique()
+
+    ht_mappings = hr2t_2[['r']]
+    ht_mappings['t2h'] = hr2t_1['t'] / hr2t_2['h']
+    ht_mappings['h2t'] = rt2h_1['h'] / rt2h_2['t']
+
+    one2one = ht_mappings[(ht_mappings['h2t'] < 1.5) & (ht_mappings['t2h'] < 1.5)]['r'].values
+    one2n = ht_mappings[(ht_mappings['h2t'] < 1.5) & (ht_mappings['t2h'] >= 1.5)]['r'].values
+    n2one = ht_mappings[(ht_mappings['h2t'] >= 1.5) & (ht_mappings['t2h'] < 1.5)]['r'].values
+    n2m = ht_mappings[(ht_mappings['h2t'] >= 1.5) & (ht_mappings['t2h'] >= 1.5)]['r'].values
+    rel_groups = {'one_to_one': one2one,
+                  'one_to_many': one2n,
+                  'many_to_one': n2one,
+                  'many_to_many': n2m}
+
     return rel_groups
 
 
@@ -295,47 +324,6 @@ class LpKGE:
         self.dataset = get_dataset(dataset=dataset)
         self.models = models
         self.work_dir = work_dir
-
-    # def find_cluster(self):
-    #     mapped_triples_eval = self.dataset.validation.mapped_triples
-    #     device: torch.device = resolve_device()
-    #     logger.info(f"Using device: {device}")
-    #     all_pos_triples = get_all_pos_triples(self.dataset)
-    #     for m in self.models:
-    #         m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
-    #         m_out_dir = self.work_dir + m + "/"
-    #         single_model = torch.load(m_dir)
-    #         single_model = single_model.to(device)
-    #         ht_hits_index, ht_fails_index = find_clusters(single_model, mapped_triples_eval, all_pos_triples=all_pos_triples)
-    #         torch.save(ht_hits_index[0], m_out_dir + "h_hits_index.pt")
-    #         torch.save(ht_fails_index[0], m_out_dir + "h_fails_index.pt")
-    #         torch.save(ht_hits_index[1], m_out_dir + "t_hits_index.pt")
-    #         torch.save(ht_fails_index[1], m_out_dir + "t_fails_index.pt")
-
-    # def dev_rel_eval(self, evaluator_key):
-    #     mapped_triples_eval = self.dataset.validation.mapped_triples
-    #     triples_df = pd.DataFrame(data=mapped_triples_eval.numpy(), columns=['h', 'r', 't'])
-    #     groups = triples_df.groupby('r', group_keys=True, as_index=False)
-    #     releval2idx = {key: idx for idx, key in enumerate(groups.groups.keys())}
-    #     ordered_keys = releval2idx.keys()
-    #     device: torch.device = resolve_device()
-    #     logger.info(f"Using device: {device}")
-    #     evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
-    #                          "targets": [LABEL_HEAD, LABEL_TAIL]}
-    #     for m in self.models:
-    #         m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
-    #         m_out_dir = self.work_dir + m + "/"
-    #         single_model = torch.load(m_dir)
-    #         single_model = single_model.to(device)
-    #         rel_evals = []
-    #         for rel in ordered_keys:
-    #             g = groups.get_group(rel)
-    #             g_tensor = torch.from_numpy(g.values)
-    #             evaluator_fun = get_evaluator_cls(evaluator_key)
-    #             head_tail_eval = evaluator_fun(single_model, g_tensor, **evaluation_kwargs)
-    #             rel_evals.append(head_tail_eval)
-    #         torch.save(torch.as_tensor(rel_evals), m_out_dir + f"{evaluator_key}_rel_eval.pt")
-    #     save2json(releval2idx, self.work_dir + f"{evaluator_key}_releval2idx.json")
 
     def dev_rel_eval(self, evaluator_key):
         mapped_triples_eval = self.dataset.validation.mapped_triples
@@ -491,9 +479,9 @@ if __name__ == '__main__':
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     eval_key = param1['evaluator_key']
-    pykeen_lp.dev_rel_eval(eval_key)
-    pykeen_lp.dev_ent_eval(eval_key)
+    # pykeen_lp.dev_rel_eval(eval_key)
+    # pykeen_lp.dev_ent_eval(eval_key)
     pykeen_lp.dev_mapping_eval(eval_key)
-    pykeen_lp.dev_pred(top_k=100)
-    pykeen_lp.test_pred()
+    # pykeen_lp.dev_pred(top_k=100)
+    # pykeen_lp.test_pred()
 
