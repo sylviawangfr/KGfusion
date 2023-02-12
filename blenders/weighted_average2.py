@@ -57,7 +57,7 @@ class WeightedAverageBlender2(Blender):
         result = evaluator.finalize()
         str_re = format_result(result)
         option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
-                     f"{self.params['evaluator_key']}_avg2"
+                     f"{self.params['evaluator_key']}_{self.params['cali']}_avg2"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result

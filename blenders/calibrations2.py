@@ -5,6 +5,9 @@ import torch
 from netcal.scaling import LogisticCalibration
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
@@ -48,14 +51,21 @@ class PlattScalingBlender2(Blender):
         pred_features = torch.chunk(pred_features, model_num, 1)
         ens_logits = []
         for index, m in enumerate(model_features):
+            model_name = self.context['models'][index]
+            old_shape = self.context[model_name]['preds'].shape
             logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
                                            use_cuda=use_cuda, vi_epochs=500)
             logistic.fit(m.numpy(), labels)
-            individual_cali = logistic.transform(pred_features[index].numpy())
-            ens_logits.append(torch.from_numpy(individual_cali))
-            gc.collect()
-            if use_cuda:
-                torch.cuda.empty_cache()
+            logger.info(f"Start transforming {model_name}.")
+            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=100 * old_shape[1])
+            individual_cali = []
+            for batch in tqdm(m_test_dataloader):
+                batch_individual_cali = logistic.transform(batch.numpy(), num_samples=100).mean(0)
+                individual_cali.extend(batch_individual_cali)
+                gc.collect()
+                if use_cuda:
+                    torch.cuda.empty_cache()
+            ens_logits.append(torch.as_tensor(individual_cali))
         ens_logits = torch.mean(torch.vstack(ens_logits), 0)
         h_preds, t_preds = torch.chunk(ens_logits, 2, 0)
         # restore format that required by pykeen evaluator
