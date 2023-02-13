@@ -62,9 +62,9 @@ class WeightedAverageBlender1(Blender):
         result = evaluator.finalize()
         str_re = format_result(result)
         option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
-                     f"{self.params['evaluator_key']}_feature{self.params['features']}" \
+                     f"{self.params['evaluator_key']}" \
                      f"_relMapping{self.params['rel_mapping']}" \
-                     f"_cali{self.params['cali']}_avg1"
+                     f"_cali{self.params['cali']}_weighted_avg1"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -76,14 +76,14 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")
-    parser.add_argument('--rel_mapping', type=str, default='True')
+    parser.add_argument('--rel_mapping', type=str, default='False')
     # "1": PerRelDataset,
     # "2": PerRelBothDataset,
     # "3": ScoresOnlyDataset,
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
     parser.add_argument('--features', type=int, default=2)  # 1, 2, 4
-    parser.add_argument("--cali", type=str, default="True")
+    parser.add_argument("--cali", type=str, default="False")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_'), "rel_mapping": args.rel_mapping == 'True'})
