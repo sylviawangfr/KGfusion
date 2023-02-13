@@ -10,9 +10,9 @@ from lp_kge.lp_pykeen import get_all_pos_triples
 
 def weighted_mean(t1, weights):
     eval_mul_score = torch.sum(torch.mul(t1, weights), 1)
-    tmp_evl_sum = torch.sum(weights, 1)
-    tmp_evl_sum[tmp_evl_sum == 0] = 0.5  # do not divided by zero
-    tmp_blender = torch.div(eval_mul_score, tmp_evl_sum)
+    weights_sum = torch.sum(weights, 1)
+    weights_sum[weights_sum == 0] = 0.5  # do not divided by zero
+    tmp_blender = torch.div(eval_mul_score, weights_sum)
     return tmp_blender
 
 

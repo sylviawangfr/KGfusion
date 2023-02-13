@@ -425,6 +425,7 @@ class LpKGE:
                     model_eval.append(group_eval)
                 else:
                     model_eval.append([0.01, 0.01, 0.01])
+            print(model_eval)
             torch.save(torch.Tensor(model_eval), m_out_dir + f"{evaluator_key}_mapping_rel_eval.pt")
         save2json(relmapping2idx, self.work_dir + f"{evaluator_key}_mapping_releval2idx.json")
 
