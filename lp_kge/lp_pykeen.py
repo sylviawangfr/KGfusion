@@ -19,6 +19,7 @@ import pandas as pd
 from pykeen.typing import MappedTriples
 from pykeen.utils import resolve_device
 
+from blenders.blender_utils import restore_eval_format
 from lp_kge.grouped_classification_evaluator import GroupededClassificationEvaluator
 from lp_kge.grouped_rank_evaluator import GroupedRankBasedEvaluator
 from lp_kge.patched_classification_evaluator import PatchedClassificationEvaluator
@@ -254,41 +255,6 @@ def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k
     return neg_scores, neg_index
 
 
-# def find_relation_mappings(dataset: pykeen.datasets.Dataset):
-#     all_triples = torch.cat([dataset.training.mapped_triples,
-#                              dataset.validation.mapped_triples,
-#                              dataset.testing.mapped_triples], 0)
-#     df = pd.DataFrame(data=all_triples.numpy(), columns=['h', 'r', 't'])
-#     del all_triples
-#     hr = df[['h', 'r']]
-#     possible_one_to_many_rel = hr[hr.duplicated()][['r']].drop_duplicates(keep='first')
-#     tmp_r1 = hr[['r']].drop_duplicates(keep='first')
-#     possible_one2one_1 = pd.concat([tmp_r1, possible_one_to_many_rel]).drop_duplicates(keep=False)
-#     rt = df[['r', 't']]
-#     del df
-#     possible_many_to_one_rel = rt[rt.duplicated()][['r']].drop_duplicates(keep='first')
-#     tmp_r2 = rt[['r']].drop_duplicates(keep='first')
-#     possible_one2one_2 = pd.concat([tmp_r2, possible_many_to_one_rel]).drop_duplicates(keep=False)
-#     many_to_many_rel = pd.concat([possible_one_to_many_rel, possible_many_to_one_rel])
-#     many_to_many_rel = many_to_many_rel[many_to_many_rel.duplicated()]
-#     one_to_one_rel = pd.concat([possible_one2one_1, possible_one2one_2])
-#     one_to_one_rel = one_to_one_rel[one_to_one_rel.duplicated()]
-#     one_to_many_rel = pd.concat([possible_one_to_many_rel, many_to_many_rel]).drop_duplicates(keep=False)
-#     many_to_one_rel = pd.concat([possible_many_to_one_rel, many_to_many_rel]).drop_duplicates(keep=False)
-#     all_count = len(one_to_one_rel.index) + \
-#                 len(one_to_many_rel.index) + \
-#                 len(many_to_one_rel.index) + \
-#                 len(many_to_many_rel.index)
-#     assert(all_count == dataset.num_relations)
-#     rel_groups = {'one_to_one': one_to_one_rel['r'].values,
-#                   'one_to_many': one_to_many_rel['r'].values,
-#                   'many_to_one': many_to_one_rel['r'].values,
-#                   'many_to_many': many_to_many_rel['r'].values}
-#     del hr
-#     del rt
-#     gc.collect()
-#     return rel_groups
-
 def find_relation_mappings(dataset: pykeen.datasets.Dataset):
     all_triples = torch.cat([dataset.training.mapped_triples,
                              dataset.validation.mapped_triples,
@@ -429,7 +395,7 @@ class LpKGE:
             torch.save(torch.Tensor(model_eval), m_out_dir + f"{evaluator_key}_mapping_rel_eval.pt")
         save2json(relmapping2idx, self.work_dir + f"{evaluator_key}_mapping_releval2idx.json")
 
-    def dev_pred(self, top_k):
+    def predict_scores(self, top_k):
         device: torch.device = resolve_device()
         logger.info(f"Using device: {device}")
         all_pos_triples = get_all_pos_triples(self.dataset)
@@ -455,18 +421,6 @@ class LpKGE:
             test_preds = predict_head_tail_scores(single_model, self.dataset.testing.mapped_triples, mode=None)
             torch.save(test_preds, m_out_dir + "preds.pt")
 
-    def test_pred(self):
-        device: torch.device = resolve_device()
-        logger.info(f"Using device: {device}")
-        for m in self.models:
-            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
-            m_out_dir = self.work_dir + m + "/"
-            single_model = torch.load(m_dir)
-            single_model = single_model.to(device)
-            # save all scores for testing set
-            test_preds = predict_head_tail_scores(single_model, self.dataset.testing.mapped_triples, mode=None)
-            torch.save(test_preds, m_out_dir + "preds.pt")
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
@@ -480,9 +434,9 @@ if __name__ == '__main__':
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     eval_key = param1['evaluator_key']
-    # pykeen_lp.dev_rel_eval(eval_key)
-    # pykeen_lp.dev_ent_eval(eval_key)
+    pykeen_lp.dev_rel_eval(eval_key)
+    pykeen_lp.dev_ent_eval(eval_key)
     pykeen_lp.dev_mapping_eval(eval_key)
-    # pykeen_lp.dev_pred(top_k=100)
-    # pykeen_lp.test_pred()
+    pykeen_lp.predict_scores(top_k=100)
+
 
