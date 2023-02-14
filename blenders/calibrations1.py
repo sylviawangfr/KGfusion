@@ -30,7 +30,7 @@ class PlattScalingBlender1(Blender):
                                                 all_pos_triples,
                                                 num_neg=self.params['num_neg'])
         test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
-        logistic = LogisticCalibration(method='momentum', detection=True, )
+        logistic = LogisticCalibration(method='momentum', detection=True, independent_probabilities=True)
         # detection : bool, default: False
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
