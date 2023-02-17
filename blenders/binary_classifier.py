@@ -3,6 +3,7 @@ import logging
 import torch
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
+from sklearn.tree import DecisionTreeClassifier
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from context_load_and_run import load_score_context
@@ -99,7 +100,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=10)
+    parser.add_argument("--num_neg", type=int, default=5)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
