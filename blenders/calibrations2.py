@@ -2,6 +2,7 @@ import argparse
 import gc
 import logging
 import torch
+from netcal.binning import IsotonicRegression
 from netcal.scaling import LogisticCalibration
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
@@ -19,11 +20,12 @@ logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.DEBUG)
 
 
-class PlattScalingBlender2(Blender):
+class CalibrationBlender2(Blender):
     def __init__(self, params):
         super().__init__(params)
         self.context = load_score_context(self.params['models'],
-                                          in_dir=params['work_dir']
+                                          in_dir=params['work_dir'],
+                                          calibration=False
                                           )
 
     def aggregate_scores(self):
@@ -52,14 +54,19 @@ class PlattScalingBlender2(Blender):
         for index, m in enumerate(model_features):
             model_name = self.context['models'][index]
             old_shape = self.context[model_name]['preds'].shape
-            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
+            if self.params['cali'] == "scaling":
+                cali = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
                                            use_cuda=use_cuda, vi_epochs=500)
-            logistic.fit(m.numpy(), labels)
+            else:
+                cali = IsotonicRegression(detection=True, independent_probabilities=True)
+            cali.fit(m.numpy(), labels)
             logger.info(f"Start transforming {model_name}.")
             m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=100 * old_shape[1])
             individual_cali = []
             for batch in tqdm(m_test_dataloader):
-                batch_individual_cali = logistic.transform(batch.numpy(), num_samples=100).mean(0)
+                batch_individual_cali = cali.transform(batch.numpy())
+                if self.params['cali'] == "scaling":
+                    batch_individual_cali = batch_individual_cali.mean(0)
                 individual_cali.extend(batch_individual_cali)
                 gc.collect()
                 if use_cuda:
@@ -82,7 +89,7 @@ class PlattScalingBlender2(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_cali2"
+        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_ScallinCali2"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -93,9 +100,10 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
+    parser.add_argument("--cali", type=str, default="isotonic")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
-    wab = PlattScalingBlender2(param1)
+    wab = CalibrationBlender2(param1)
     wab.aggregate_scores()

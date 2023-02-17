@@ -1,6 +1,7 @@
 import argparse
 import logging
 import torch
+from netcal.binning import IsotonicRegression
 from netcal.scaling import LogisticCalibration
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
@@ -13,12 +14,12 @@ from common_utils import format_result, save_to_file
 logger = logging.getLogger(__name__)
 
 
-class PlattScalingBlender1(Blender):
+class CalibrationBlender1(Blender):
     def __init__(self, params):
         super().__init__(params)
         self.context = load_score_context(self.params['models'],
                                           in_dir=params['work_dir'],
-                                          calibration=params['cali']=="True"
+                                          calibration=False
                                           )
 
     def aggregate_scores(self):
@@ -30,7 +31,10 @@ class PlattScalingBlender1(Blender):
                                                 all_pos_triples,
                                                 num_neg=self.params['num_neg'])
         test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
-        logistic = LogisticCalibration(method='momentum', detection=True, independent_probabilities=True)
+        if self.params['cali'] == "scaling":
+            cali = LogisticCalibration(method='momentum', detection=True, independent_probabilities=True)
+        else:
+            cali = IsotonicRegression(detection=True, independent_probabilities=True)
         # detection : bool, default: False
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
@@ -38,9 +42,9 @@ class PlattScalingBlender1(Blender):
         inputs = torch.cat([pos, neg], 0).numpy()
         labels = torch.cat([torch.ones(pos.shape[0], 1),
                             torch.zeros(neg.shape[0], 1)], 0).numpy()
-        logistic.fit(inputs, labels)
+        cali.fit(inputs, labels)
         pred_features = test_feature_dataset.get_all_test_examples()
-        ens_logits = logistic.transform(pred_features)
+        ens_logits = cali.transform(pred_features)
         h_preds, t_preds = torch.chunk(torch.as_tensor(ens_logits), 2, 0)
         # restore format that required by pykeen evaluator
         ht_scores = [h_preds, t_preds]
@@ -57,10 +61,12 @@ class PlattScalingBlender1(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_cali"
+        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_ScallingCali1"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
+
+
 
 
 if __name__ == '__main__':
@@ -68,10 +74,10 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
-    parser.add_argument("--cali", type=str, default="False")
+    parser.add_argument("--cali", type=str, default="isotonic")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
-    wab = PlattScalingBlender1(param1)
+    wab = CalibrationBlender1(param1)
     wab.aggregate_scores()
