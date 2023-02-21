@@ -17,12 +17,12 @@ from pykeen.utils import normalize_path, load_configuration
 from common_utils import init_dir
 
 
-def train_ComplEx2(dataset):
+def train_CP(dataset):
     pipeline_result = pipeline(
         dataset=dataset,
-        model="ComplEx",
+        model="CP",
         model_kwargs=dict(embedding_dim=512, entity_initializer="xavier_uniform",
-                          relation_initializer="xavier_uniform"),
+                          relation_initializer="xavier_uniform", rank=100),
         loss=CrossEntropyLoss,
         loss_kwargs={"reduction": "mean"},
         regularizer=LpRegularizer,
@@ -173,7 +173,7 @@ def train_NodePiece(dataset):
     # extra_kwargs = dict(move_to_cpu=False,
     #                     save_replicates=False,
     #                     save_training=False)
-    path = normalize_path("galkin2022_nodepiece_fb15k237.yaml")
+    path = normalize_path("../galkin2022_nodepiece_fb15k237.yaml")
     config = load_configuration(path)
     config['pipeline']['dataset'] = dataset
     pipeline_results = pipeline_from_config(config=config)

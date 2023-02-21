@@ -3,6 +3,7 @@ import logging
 import torch
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
+from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 names = [
     # "Nearest Neighbors",
-    # "Linear SVM",
+    "Linear SVM",
     # "RBF SVM",
     # "Gaussian Process",
     # "DecisionTree",
@@ -34,8 +35,8 @@ names = [
 
 classifiers = [
     # KNeighborsClassifier(3),
-    # SVC(kernel="linear", C=0.025, probability=True),
-    # SVC(gamma=2, C=1),
+    SVC(kernel="linear", C=0.025, probability=True),
+    # SVC(gamma=2, C=1, probability=True),
     # GaussianProcessClassifier(1.0 * RBF(1.0)),
     # DecisionTreeClassifier(max_depth=5),
     # RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
@@ -65,10 +66,16 @@ class EssembleClassifier(Blender):
         test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
         pos, neg = dev_feature_dataset.get_all_dev_examples()
         inputs = torch.cat([pos, neg], 0).numpy()
-        labels = torch.cat([torch.ones(pos.shape[0], 1),
-                            torch.zeros(neg.shape[0], 1)], 0).squeeze().numpy()
+        labels = torch.cat([torch.ones(pos.shape[0]),
+                            torch.zeros(neg.shape[0])], 0).numpy()
+        rate = pos.shape[0] / neg.shape[0]
+        # weights = torch.cat([torch.ones(pos.shape[0]),
+        #                      torch.full([neg.shape[0]], rate)]).numpy()
         pred_features = test_feature_dataset.get_all_test_examples()
         for name, clf in zip(names, classifiers):
+            # if name in ["AdaBoost", "NaiveBayes"]:
+            #     clf.fit(inputs, labels, weights)
+            # else:
             clf.fit(inputs, labels)
             test_dataloader = DataLoader(pred_features.numpy(), batch_size=1000)
             individual_scores = []
@@ -100,7 +107,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=5)
+    parser.add_argument("--num_neg", type=int, default=3)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
