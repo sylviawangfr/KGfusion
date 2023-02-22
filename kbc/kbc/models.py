@@ -88,7 +88,7 @@ class KBCModel(nn.Module, ABC):
         """
         if chunk_size < 0:
             chunk_size = self.sizes[2]
-        # ranks = torch.ones(len(queries))
+        all_scores = []
         with torch.no_grad():
             c_begin = 0
             while c_begin < self.sizes[2]:
@@ -98,7 +98,10 @@ class KBCModel(nn.Module, ABC):
                     these_queries = queries[b_begin:b_begin + batch_size]
                     q = self.get_queries(these_queries)
                     scores = q @ rhs
-
+                    all_scores.append(scores)
+                    b_begin += batch_size
+                c_begin += chunk_size
+        return torch.cat(all_scores, 0)
 
 
 class CP(KBCModel):

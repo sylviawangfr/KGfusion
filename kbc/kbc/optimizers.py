@@ -34,7 +34,9 @@ class KBCOptimizer(object):
             while b_begin < examples.shape[0]:
                 input_batch = actual_examples[
                     b_begin:b_begin + self.batch_size
-                ].cuda()
+                ]
+                if torch.cuda.is_available():
+                    input_batch.cuda()
 
                 predictions, factors = self.model.forward(input_batch)
                 truth = input_batch[:, 2]

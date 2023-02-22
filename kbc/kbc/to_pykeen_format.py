@@ -17,8 +17,6 @@ from kbc.regularizers import F2, N3
 from kbc.optimizers import KBCOptimizer
 
 
-
-
 def avg_both(mrrs: Dict[str, float], hits: Dict[str, torch.FloatTensor]):
     """
     aggregate metrics for missing lhs and rhs
@@ -73,9 +71,13 @@ def train_and_pred(args):
 
             print("\t TRAIN: ", train)
             print("\t VALID : ", valid)
+    result_test = dataset.eval(model, 'test', -1)
+    results1 = dataset.pred(model, 'test', -1)
+    torch.save(results1.detach().cpu(), args.out_dir + "preds.pt")
+    results2 = dataset.pred(model, 'dev', -1)
+    torch.save(results2.detach().cpu(), args.out_dir + "evals.pt")
 
-    results = dataset.eval(model, 'test', -1)
-    print("\n\nTEST : ", results)
+
 
 
 if __name__ == '__main__':
@@ -84,12 +86,12 @@ if __name__ == '__main__':
         description="Relational learning contraption"
     )
     parser.add_argument(
-        '--dataset', choices=datasets,
+        '--dataset', choices=datasets, default='UMLS',
         help="Dataset in {}".format(datasets)
     )
     models = ['CP', 'ComplEx']
     parser.add_argument(
-        '--model', choices=models,
+        '--model', choices=models, default="ComplEx",
         help="Model in {}".format(models)
     )
     regularizers = ['N3', 'F2']
@@ -107,11 +109,11 @@ if __name__ == '__main__':
         help="Number of epochs."
     )
     parser.add_argument(
-        '--valid', default=3, type=float,
+        '--valid', default=5, type=float,
         help="Number of epochs before valid."
     )
     parser.add_argument(
-        '--rank', default=1000, type=int,
+        '--rank', default=500, type=int,
         help="Factorization rank."
     )
     parser.add_argument(
@@ -138,4 +140,5 @@ if __name__ == '__main__':
         '--decay2', default=0.999, type=float,
         help="decay rate for second moment estimate in Adam"
     )
-    args = parser.parse_args()
+    m_args = parser.parse_args()
+    train_and_pred(m_args)

@@ -52,7 +52,9 @@ class Dataset(object):
             at: Tuple[int] = (1, 3, 10)
     ):
         test = self.get_examples(split)
-        examples = torch.from_numpy(test.astype('int64')).cuda()
+        examples = torch.from_numpy(test.astype('int64'))
+        if torch.cuda.is_available():
+            examples.cuda()
         missing = [missing_eval]
         if missing_eval == 'both':
             missing = ['rhs', 'lhs']
@@ -83,14 +85,14 @@ class Dataset(object):
             self, model: KBCModel, split: str, n_queries: int = -1, missing_eval: str = 'both',
     ):
         test = self.get_examples(split)
-        examples = torch.from_numpy(test.astype('int64')).cuda()
+        examples = torch.from_numpy(test.astype('int64'))
+        if torch.cuda.is_available():
+            examples.cuda()
         missing = [missing_eval]
         if missing_eval == 'both':
             missing = ['rhs', 'lhs']
 
-        mean_reciprocal_rank = {}
-        hits_at = {}
-
+        h_t_preds = []
         for m in missing:
             q = examples.clone()
             if n_queries > 0:
@@ -101,44 +103,10 @@ class Dataset(object):
                 q[:, 0] = q[:, 2]
                 q[:, 2] = tmp
                 q[:, 1] += self.n_predicates // 2
-
-            chunk_size = self.sizes[2] * 1000
-            with torch.no_grad():
-                c_begin = 0
-                while c_begin < self.sizes[2]:
-                    b_begin = 0
-                    rhs = self.get_rhs(c_begin, chunk_size)
-                    while b_begin < len(queries):
-                        these_queries = queries[b_begin:b_begin + batch_size]
-                        q = self.get_queries(these_queries)
-
-                        scores = q @ rhs
-                        targets = self.score(these_queries)
-
-                        # set filtered and true scores to -1e6 to be ignored
-                        # take care that scores are chunked
-                        for i, query in enumerate(these_queries):
-                            filter_out = filters[(query[0].item(), query[1].item())]
-                            filter_out += [queries[b_begin + i, 2].item()]
-                            if chunk_size < self.sizes[2]:
-                                filter_in_chunk = [
-                                    int(x - c_begin) for x in filter_out
-                                    if c_begin <= x < c_begin + chunk_size
-                                ]
-                                scores[i, torch.LongTensor(filter_in_chunk)] = -1e6
-                            else:
-                                scores[i, torch.LongTensor(filter_out)] = -1e6
-                        ranks[b_begin:b_begin + batch_size] += torch.sum(
-                            (scores >= targets).float(), dim=1
-                        ).cpu()
-
-                        b_begin += batch_size
-
-                    c_begin += chunk_size
-            return ranks
-                ))))
-
-        return mean_reciprocal_rank, hits_at
+            scores = model.get_preds(q)
+            h_t_preds.append(scores)
+        ht = torch.cat(h_t_preds, 1)
+        return ht
 
     def get_shape(self):
         return self.n_entities, self.n_predicates, self.n_entities
