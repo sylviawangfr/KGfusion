@@ -74,6 +74,32 @@ class KBCModel(nn.Module, ABC):
                 c_begin += chunk_size
         return ranks
 
+    def get_preds(
+            self, queries: torch.Tensor,
+            batch_size: int = 1000, chunk_size: int = -1
+    ):
+        """
+        Returns filtered ranking for each queries.
+        :param queries: a torch.LongTensor of triples (lhs, rel, rhs)
+        :param filters: filters[(lhs, rel)] gives the rhs to filter from ranking
+        :param batch_size: maximum number of queries processed at once
+        :param chunk_size: maximum number of candidates processed at once
+        :return:
+        """
+        if chunk_size < 0:
+            chunk_size = self.sizes[2]
+        # ranks = torch.ones(len(queries))
+        with torch.no_grad():
+            c_begin = 0
+            while c_begin < self.sizes[2]:
+                b_begin = 0
+                rhs = self.get_rhs(c_begin, chunk_size)
+                while b_begin < len(queries):
+                    these_queries = queries[b_begin:b_begin + batch_size]
+                    q = self.get_queries(these_queries)
+                    scores = q @ rhs
+
+
 
 class CP(KBCModel):
     def __init__(

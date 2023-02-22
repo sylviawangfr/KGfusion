@@ -17,41 +17,6 @@ from pykeen.utils import normalize_path, load_configuration
 from common_utils import init_dir
 
 
-def train_CP(dataset):
-    pipeline_result = pipeline(
-        dataset=dataset,
-        model="CP",
-        model_kwargs=dict(embedding_dim=512, entity_initializer="xavier_uniform",
-                          relation_initializer="xavier_uniform", rank=100),
-        loss=CrossEntropyLoss,
-        loss_kwargs={"reduction": "mean"},
-        regularizer=LpRegularizer,
-        regularizer_kwargs=dict(weight=5e-2, p=2.0, ),
-        # lr_scheduler='ExponentialLR',
-        # lr_scheduler_kwargs=dict(gamma=0.99, ),
-        optimizer="adagrad",
-        optimizer_kwargs=dict(lr=0.5),
-        evaluator=RankBasedEvaluator,
-        training_loop="SLCWA",
-        negative_sampler="basic",
-        negative_sampler_kwargs={"num_negs_per_pos": 10},
-        training_kwargs={
-            "num_epochs": 1000,
-            # "num_epochs": 10,
-            "batch_size": 1024
-        },
-        # result_tracker='mlflow',
-        # result_tracker_kwargs=dict(
-        #     tracking_uri='http://127.0.0.1:5000',
-        #     experiment_name='ComplEx training on FB237',
-        # ),
-        stopper='early',
-        stopper_kwargs={"patience": 10},
-        evaluator_kwargs={"filtered": True}
-    )
-    return pipeline_result
-
-
 def train_ComplEx(dataset):
     pipeline_result = pipeline(
         dataset=dataset,
@@ -180,6 +145,13 @@ def train_NodePiece(dataset):
     return pipeline_results
 
 
+def train_RotatE(dataset):
+    path = normalize_path(f"settings/RotatE_{dataset}.json")
+    config = load_configuration(path)
+    pipeline_result = pipeline_from_config(config=config)
+    return pipeline_result
+
+
 class DeepSet(torch.nn.Module):
     def __init__(self, hidden_dim=64):
         super().__init__()
@@ -266,13 +238,15 @@ def train_multi_models(params):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    # parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE_NodePiece")
-    parser.add_argument('--models', type=str, default="NodePiece")
+    # parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
+    # parser.add_argument('--models', type=str, default="NodePiece")
+    parser.add_argument('--models', type=str, default="RotatE")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--work_dir', type=str, default="outputs/umls/")
+    parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
+    # train_model("RotatE", "UMLS", param1['work_dir'])
     train_multi_models(param1)
     # train_NodePiece('fb15k23')
     # train_NodePiece('UMLS')
