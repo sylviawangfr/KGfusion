@@ -25,7 +25,7 @@
     "training_loop": "SLCWA",
     "negative_sampler": "basic",
     "negative_sampler_kwargs": {
-      "num_negs_per_pos": 64
+      "num_negs_per_pos": 128
     },
     "training_kwargs": {
       "num_epochs": 100,
