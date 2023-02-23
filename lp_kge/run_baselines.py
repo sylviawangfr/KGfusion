@@ -3,7 +3,7 @@ from pathlib import Path
 
 import torch
 import pykeen.datasets as ds
-from pykeen.datasets import ConceptNet, UMLS, get_dataset
+from pykeen.datasets import ConceptNet, UMLS, get_dataset, WN18RR
 from pykeen.losses import CrossEntropyLoss, BCEWithLogitsLoss
 from pykeen.models import ComplEx, TuckER, NodePiece
 from pykeen.pipeline import pipeline, replicate_pipeline_from_config, pipeline_from_config
@@ -17,43 +17,15 @@ from pykeen.utils import normalize_path, load_configuration
 from common_utils import init_dir
 
 
-def train_ComplEx(dataset):
-    pipeline_result = pipeline(
-        dataset=dataset,
-        model="ComplEx",
-        model_kwargs=dict(embedding_dim=200, entity_initializer="xavier_uniform",
-                          relation_initializer="xavier_uniform", predict_with_sigmoid=True),
-        loss=CrossEntropyLoss,
-        loss_kwargs={"reduction": "mean"},
-        regularizer=LpRegularizer,
-        regularizer_kwargs=dict(weight=0.01, p=2.0, ),
-        # lr_scheduler='ExponentialLR',
-        # lr_scheduler_kwargs=dict(gamma=0.99, ),
-        optimizer="adagrad",
-        optimizer_kwargs=dict(lr=0.5),
-        evaluator=RankBasedEvaluator,
-        training_loop="SLCWA",
-        negative_sampler="basic",
-        negative_sampler_kwargs={"num_negs_per_pos": 10},
-        training_kwargs={
-            "num_epochs": 1000,
-            # "num_epochs": 10,
-            "batch_size": 1024
-        },
-        # result_tracker='mlflow',
-        # result_tracker_kwargs=dict(
-        #     tracking_uri='http://127.0.0.1:5000',
-        #     experiment_name='ComplEx training on FB237',
-        # ),
-        stopper='early',
-        stopper_kwargs={"patience": 10},
-        evaluator_kwargs={"filtered": True}
-    )
+def train_TuckER(dataset):
+    path = normalize_path(f"settings/TuckER_{dataset}.json")
+    config = load_configuration(path)
+    pipeline_result = pipeline_from_config(config=config)
     return pipeline_result
 
 
-def train_TuckER(dataset):
-    path = normalize_path(f"settings/TuckER_{dataset}.json")
+def train_ComnplEx(dataset):
+    path = normalize_path(f"settings/ComplEx_{dataset}.json")
     config = load_configuration(path)
     pipeline_result = pipeline_from_config(config=config)
     return pipeline_result

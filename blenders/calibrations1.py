@@ -61,7 +61,7 @@ class CalibrationBlender1(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_ScallingCali1"
+        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_Cali1{self.params['cali']}"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -71,10 +71,10 @@ class CalibrationBlender1(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER")
+    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
-    parser.add_argument("--cali", type=str, default="isotonic")
+    parser.add_argument("--cali", type=str, default="scaling")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__

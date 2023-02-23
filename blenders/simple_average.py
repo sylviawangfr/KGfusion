@@ -43,7 +43,7 @@ class SimpleAverageBlender(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_{self.params['cali']}_" \
+        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_cali{self.params['cali']}_" \
                      "simple_avg"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
@@ -74,7 +74,7 @@ class SimpleAverageBlender(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER")
+    parser.add_argument('--models', type=str, default="TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument("--cali", type=str, default="True")
