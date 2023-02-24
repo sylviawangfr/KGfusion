@@ -98,7 +98,8 @@ class KBCModel(nn.Module, ABC):
                     these_queries = queries[b_begin:b_begin + batch_size]
                     q = self.get_queries(these_queries)
                     scores = q @ rhs
-                    all_scores.append(scores)
+                    sigmoid_scores = torch.sigmoid(scores)
+                    all_scores.append(sigmoid_scores)
                     b_begin += batch_size
                 c_begin += chunk_size
         return torch.cat(all_scores, 0)

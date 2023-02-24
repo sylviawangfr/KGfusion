@@ -4,7 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
-
+import os
 from pathlib import Path
 import pkg_resources
 import pickle
@@ -91,7 +91,7 @@ class Dataset(object):
         missing = [missing_eval]
         if missing_eval == 'both':
             missing = ['rhs', 'lhs']
-
+        kbc2pykeen, _ = get_dicts(self.root)
         h_t_preds = []
         for m in missing:
             q = examples.clone()
@@ -103,10 +103,32 @@ class Dataset(object):
                 q[:, 0] = q[:, 2]
                 q[:, 2] = tmp
                 q[:, 1] += self.n_predicates // 2
+            # q to original id and order
             scores = model.get_preds(q)
-            h_t_preds.append(scores)
+            reordered_scores = kbc_to_pykeen_scores(scores, kbc2pykeen)
+            h_t_preds.append(reordered_scores)
         ht = torch.cat(h_t_preds, 1)
-        return ht
+        return ht.detach().cpu()
 
     def get_shape(self):
         return self.n_entities, self.n_predicates, self.n_entities
+
+
+def get_dicts(data_dir):
+    entities_to_id = dict()
+    relations_to_id = dict()
+    for (dic, f) in zip([entities_to_id, relations_to_id], ['ent_id', 'rel_id']):
+        ff = open(os.path.join(data_dir, f), 'r')
+        for line in ff.readlines():
+            pyk, kbc = line.strip().split('\t')
+            dic.update({int(kbc): int(pyk)})
+        ff.close()
+    return entities_to_id, relations_to_id
+
+
+def kbc_to_pykeen_scores(kbc_preds, kbc2pykeen):
+    kbcids = list(kbc2pykeen.keys())
+    kbcids.sort()
+    pykeen_orded_index = [kbc2pykeen[k] for k in kbcids]
+    reorded = kbc_preds[:, torch.as_tensor(pykeen_orded_index)]
+    return reorded
