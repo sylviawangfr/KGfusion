@@ -14,13 +14,13 @@
     "regularizer": "Lp",
     "regularizer_kwargs": {
       "apply_only_once": false,
-      "weight": 0.01,
+      "weight": 0.02,
       "p": 2.0,
       "normalize": false
     },
     "optimizer": "AdaGrad",
     "optimizer_kwargs": {
-      "lr": 0.01
+      "lr": 0.5
     },
     "loss": "BCEAfterSigmoid",
     "loss_kwargs": {
