@@ -20,7 +20,7 @@
     },
     "optimizer": "AdaGrad",
     "optimizer_kwargs": {
-      "lr": 0.01
+      "lr": 0.5
     },
     "loss": "BCEAfterSigmoid",
     "loss_kwargs": {
