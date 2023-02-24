@@ -24,7 +24,7 @@ def train_TuckER(dataset):
     return pipeline_result
 
 
-def train_ComnplEx(dataset):
+def train_ComplEx(dataset):
     path = normalize_path(f"settings/ComplEx_{dataset}.json")
     config = load_configuration(path)
     pipeline_result = pipeline_from_config(config=config)
@@ -65,8 +65,8 @@ if __name__ == '__main__':
     # parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
     # parser.add_argument('--models', type=str, default="NodePiece")
     parser.add_argument('--models', type=str, default="TuckER")
-    parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    parser.add_argument('--dataset', type=str, default="WN18RR")
+    parser.add_argument('--work_dir', type=str, default="../outputs/wn18rr/")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
