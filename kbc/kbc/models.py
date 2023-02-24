@@ -75,7 +75,7 @@ class KBCModel(nn.Module, ABC):
         return ranks
 
     def get_preds(
-            self, queries: torch.Tensor,
+            self, queries: torch.Tensor, filters: Dict[Tuple[int, int], List[int]]=None,
             batch_size: int = 1000, chunk_size: int = -1
     ):
         """
@@ -98,8 +98,23 @@ class KBCModel(nn.Module, ABC):
                     these_queries = queries[b_begin:b_begin + batch_size]
                     q = self.get_queries(these_queries)
                     scores = q @ rhs
-                    sigmoid_scores = torch.sigmoid(scores)
-                    all_scores.append(sigmoid_scores)
+                    if filters is not None:
+                    # set filtered and true scores to -1e6 to be ignored
+                        # take care that scores are chunked
+                        for i, query in enumerate(these_queries):
+                            filter_out = filters[(query[0].item(), query[1].item())]
+                            filter_out += [queries[b_begin + i, 2].item()]
+                            if chunk_size < self.sizes[2]:
+                                filter_in_chunk = [
+                                    int(x - c_begin) for x in filter_out
+                                    if c_begin <= x < c_begin + chunk_size
+                                ]
+                                scores[i, torch.LongTensor(filter_in_chunk)] = -1e6
+                            else:
+                                scores[i, torch.LongTensor(filter_out)] = -1e6
+                    # sigmoid_scores = torch.sigmoid(scores)
+                    # all_scores.append(sigmoid_scores)
+                    all_scores.append(scores)
                     b_begin += batch_size
                 c_begin += chunk_size
         return torch.cat(all_scores, 0)

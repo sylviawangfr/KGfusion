@@ -198,7 +198,7 @@ def mapped_triples_2_anyburl_hrt_dev(dataset: pykeen.datasets.Dataset, anyburl_d
     df_dev = pd.DataFrame(dataset.validation.mapped_triples.numpy()).astype('int64')
     df_dev.to_csv(osp.join(anyburl_dir, f'valid.txt'), header=False, index=False, sep='\t')
     # use dev as blender training set
-    df_test = pd.DataFrame(dataset.validation.mapped_triples.numpy()).astype('int64')
+    df_test = pd.DataFrame(dataset.testing.mapped_triples.numpy()).astype('int64')
     df_test.to_csv(osp.join(anyburl_dir, f'test.txt'), header=False, index=False, sep='\t')
     wait_until_anyburl_data_ready(anyburl_dir)
 

@@ -82,7 +82,7 @@ class Dataset(object):
         return mean_reciprocal_rank, hits_at
 
     def pred(
-            self, model: KBCModel, split: str, n_queries: int = -1, missing_eval: str = 'both',
+            self, model: KBCModel, split: str, n_queries: int = -1, missing_eval: str = 'both', filter=False
     ):
         test = self.get_examples(split)
         examples = torch.from_numpy(test.astype('int64'))
@@ -104,9 +104,13 @@ class Dataset(object):
                 q[:, 2] = tmp
                 q[:, 1] += self.n_predicates // 2
             # q to original id and order
-            scores = model.get_preds(q)
+            if filter:
+                scores = model.get_preds(q, self.to_skip[m])
+            else:
+                scores = model.get_preds(q)
             reordered_scores = kbc_to_pykeen_scores(scores, kbc2pykeen)
             h_t_preds.append(reordered_scores)
+        h_t_preds.reverse()
         ht = torch.cat(h_t_preds, 1)
         return ht.detach().cpu()
 
