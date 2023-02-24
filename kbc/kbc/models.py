@@ -98,6 +98,7 @@ class KBCModel(nn.Module, ABC):
                     these_queries = queries[b_begin:b_begin + batch_size]
                     q = self.get_queries(these_queries)
                     scores = q @ rhs
+                    true_scores = scores[torch.arange(0, scores.shape[0]), these_queries[:, 2]]
                     if filters is not None:
                     # set filtered and true scores to -1e6 to be ignored
                         # take care that scores are chunked
@@ -112,6 +113,8 @@ class KBCModel(nn.Module, ABC):
                                 scores[i, torch.LongTensor(filter_in_chunk)] = -1e6
                             else:
                                 scores[i, torch.LongTensor(filter_out)] = -1e6
+                    # rescore true scores
+                    scores[torch.arange(0, these_queries.shape[0]), these_queries[:, 2]] = true_scores
                     # sigmoid_scores = torch.sigmoid(scores)
                     # all_scores.append(sigmoid_scores)
                     all_scores.append(scores)

@@ -12,6 +12,8 @@ from typing import Dict, Tuple, List
 
 import numpy as np
 import torch
+
+
 from kbc.models import KBCModel
 
 
@@ -124,7 +126,7 @@ def get_dicts(data_dir):
     for (dic, f) in zip([entities_to_id, relations_to_id], ['ent_id', 'rel_id']):
         ff = open(os.path.join(data_dir, f), 'r')
         for line in ff.readlines():
-            pyk, kbc = line.strip().split('\t')
+            kbc, pyk = line.strip().split('\t')
             dic.update({int(kbc): int(pyk)})
         ff.close()
     return entities_to_id, relations_to_id

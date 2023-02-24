@@ -74,21 +74,20 @@ def train_and_pred(args):
             print("\t VALID : ", valid)
     result_test = dataset.eval(model, 'test', -1)
     print(result_test)
-    test_scores = dataset.pred(model, 'test', -1, filter=True)
+    test_scores = dataset.pred(model, 'test', -1, filter=False)
+    # test_scores = dataset.pred(model, 'test', -1, filter=True)
     pykeen_dataset = get_dataset(dataset=args.dataset)
     eval_groups(pykeen_dataset.testing.mapped_triples, test_scores)
-    # torch.save(test_scores, args.out_dir + "preds.pt")
-    # dev_scores = dataset.pred(model, 'valid', -1)
-    #
-    # all_pos_triples = get_all_pos_triples(pykeen_dataset)
-    # to_fusion_eval_format_and_save_topk(pykeen_dataset.validation.mapped_triples, dev_scores, all_pos_triples, args.out_dir, top_k=100)
-    # per_rel_eval(pykeen_dataset.validation.mapped_triples, dev_scores, args.out_dir)
-    # per_mapping_eval(pykeen_dataset.validation.mapped_triples, dev_scores, args.out_dir)
+    torch.save(test_scores, args.out_dir + "preds.pt")
+    dev_scores = dataset.pred(model, 'valid', -1, filter=True)
+    all_pos_triples = get_all_pos_triples(pykeen_dataset)
+    to_fusion_eval_format_and_save_topk(pykeen_dataset.validation.mapped_triples, dev_scores.clone(), all_pos_triples, args.out_dir, top_k=100)
+    per_rel_eval(pykeen_dataset.validation.mapped_triples, dev_scores, args.out_dir)
+    per_mapping_eval(pykeen_dataset, dev_scores, args.out_dir)
 
 
 def to_fusion_eval_format_and_save_topk(mapped_triples, pred_scores, all_pos_triples, out_dir, top_k=10):
     m_dev_preds = torch.chunk(pred_scores, 2, 1)
-    m_dev_preds = [i.squeeze(1) for i in m_dev_preds]
     pos_scores = m_dev_preds[0]
     pos_scores = pos_scores[torch.arange(0, mapped_triples.shape[0]),
                             mapped_triples[:, 0]]
@@ -115,7 +114,7 @@ def calc_hit_at_k(pred_scores, ground_truth_idx):
     """
     # scores[torch.arange(0, batch.shape[0]), batch[:, column]]
     targets = pred_scores[torch.arange(0, pred_scores.shape[0]), ground_truth_idx].unsqueeze(1)
-    ranks = torch.ones(pred_scores.shape[0])
+    ranks = torch.zeros(pred_scores.shape[0])
     ranks[:] += torch.sum((pred_scores >= targets).float(), dim=1).cpu()
     hits_at = torch.FloatTensor((list(map(
         lambda x: torch.mean((ranks <= x).float()).item(),
@@ -136,16 +135,14 @@ def per_rel_eval(mapped_triples, scores, out_dir):
         g_index = torch.from_numpy(g.index.values)
         rg_index = torch.as_tensor(g_index)
         h_preds, t_preds = scores[rg_index].chunk(2, 1)
-        h_preds = h_preds.squeeze(1)
-        t_preds = t_preds.squeeze(1)
-        heads = torch.as_tensor(g['h'].values).unsqueeze(1)
-        tails = torch.as_tensor(g['t'].values).unsqueeze(1)
-        head_hits = calc_hit_at_10(h_preds, heads)
-        tail_hits = calc_hit_at_10(t_preds, tails)
-        both_hit = calc_hit_at_10(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
-        head_tail_eval.append([head_hits,
-                              tail_hits,
-                              both_hit])
+        heads = torch.as_tensor(g['h'].values)
+        tails = torch.as_tensor(g['t'].values)
+        head_hits = calc_hit_at_k(h_preds, heads)
+        tail_hits = calc_hit_at_k(t_preds, tails)
+        both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+        head_tail_eval.append([head_hits[-1],
+                              tail_hits[-1],
+                              both_hit[-1]])
     head_tail_eval = torch.Tensor(head_tail_eval)
     torch.save(head_tail_eval, out_dir + file_name)
 
@@ -154,7 +151,7 @@ def per_mapping_eval(pykeen_dataset, scores, out_dir):
     mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
     rel_mappings = find_relation_mappings(pykeen_dataset)
     dev = pykeen_dataset.validation.mapped_triples
-    triples_df = pd.DataFrame(data=dev.numpy(), columns=['h', 'r', 't'])
+    triples_df = pd.DataFrame(data=dev.numpy(), columns=['h', 'r', 't'], )
     relmapping2idx = dict()
     for idx, mapping_type in enumerate(mappings):
         mapped_rels = rel_mappings[mapping_type]
@@ -165,22 +162,20 @@ def per_mapping_eval(pykeen_dataset, scores, out_dir):
         tri_group = triples_df.query('r in @tmp_rels')
         if len(tri_group.index) > 0:
             g = torch.from_numpy(tri_group.values)
-            g_index = torch.from_numpy(g.index.values)
+            g_index = torch.from_numpy(tri_group.index.values)
             rg_index = torch.as_tensor(g_index)
             h_preds, t_preds = scores[rg_index].chunk(2, 1)
-            h_preds = h_preds.squeeze(1)
-            t_preds = t_preds.squeeze(1)
-            heads = torch.as_tensor(g['h'].values).unsqueeze(1)
-            tails = torch.as_tensor(g['t'].values).unsqueeze(1)
-            head_hits = calc_hit_at_10(h_preds, heads)
-            tail_hits = calc_hit_at_10(t_preds, tails)
-            both_hit = calc_hit_at_10(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
-            head_tail_eval.append([head_hits,
-                                   tail_hits,
-                                   both_hit])
+            heads = g[:, 0]
+            tails = g[:, 2]
+            head_hits = calc_hit_at_k(h_preds, heads)
+            tail_hits = calc_hit_at_k(t_preds, tails)
+            both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+            head_tail_eval.append([head_hits[-1],
+                                   tail_hits[-1],
+                                   both_hit[-1]])
         else:
             head_tail_eval.append([0.01, 0.01, 0.01])
-        torch.save(torch.Tensor(head_tail_eval), out_dir + f"rank_mapping_rel_eval.pt")
+    torch.save(torch.Tensor(head_tail_eval), out_dir + f"rank_mapping_rel_eval.pt")
     if not does_exist(out_dir + f"rank_mapping_releval2idx.json"):
         save2json(relmapping2idx, out_dir + f"rank_mapping_releval2idx.json")
 
