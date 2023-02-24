@@ -22,7 +22,7 @@
     "optimizer_kwargs": {
       "lr": 0.5
     },
-    "loss": "SoftplusLoss",
+    "loss": "BCEAfterSigmoid",
     "loss_kwargs": {
       "reduction": "mean"
     },

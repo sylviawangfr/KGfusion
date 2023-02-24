@@ -64,8 +64,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     # parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
     # parser.add_argument('--models', type=str, default="NodePiece")
-    parser.add_argument('--models', type=str, default="TuckER")
-    parser.add_argument('--dataset', type=str, default="WN18RR")
+    parser.add_argument('--models', type=str, default="ComplEx")
+    parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/wn18rr/")
     args = parser.parse_args()
     param1 = args.__dict__
