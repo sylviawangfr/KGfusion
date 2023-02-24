@@ -11,7 +11,7 @@ from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples, predict_head_tail_scores
 
 
-class SimpleAverageBlender(Blender):
+class TNormBlender(Blender):
     def __init__(self, params):
         super().__init__(params)
         self.context = load_score_context(self.params['models'],
@@ -26,7 +26,7 @@ class SimpleAverageBlender(Blender):
         all_pos = get_all_pos_triples(self.dataset)
         test_data_feature = ScoresOnlyDataset(mapped_triples, self.context, all_pos)
         score_feature = test_data_feature.get_all_test_examples()
-        blender = torch.mean(score_feature, dim=1)
+        blender = torch.min(score_feature, dim=1).values
         h_preds, t_preds = torch.chunk(blender, 2, 0)
         # restore format that required by pykeen evaluator
         ht_scores = [h_preds, t_preds]
@@ -81,6 +81,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
-    wab = SimpleAverageBlender(param1)
+    wab = TNormBlender(param1)
     # wab.test_pred()
     wab.aggregate_scores()

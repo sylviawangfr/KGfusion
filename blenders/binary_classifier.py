@@ -28,7 +28,7 @@ names = [
     # "DecisionTree",
     # "RandomForest",
     "NeuralNet",
-    "AdaBoost",
+    # "AdaBoost",
     "NaiveBayes",
     "QDA",
 ]
@@ -41,7 +41,7 @@ classifiers = [
     # DecisionTreeClassifier(max_depth=5),
     # RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
     MLPClassifier(alpha=1, max_iter=500),
-    AdaBoostClassifier(),
+    # AdaBoostClassifier(),
     GaussianNB(),
     QuadraticDiscriminantAnalysis(),
 ]
@@ -105,9 +105,9 @@ class EssembleClassifier(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="TuckER_RotatE")
+    parser.add_argument('--models', type=str, default="TuckER_RotatE_ComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=3)
+    parser.add_argument("--num_neg", type=int, default=5)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
