@@ -16,9 +16,7 @@ from kbc.models import CP, ComplEx
 from kbc.regularizers import F2, N3
 from kbc.optimizers import KBCOptimizer
 from lp_kge.lp_pykeen import get_neg_scores_top_k, find_relation_mappings, get_all_pos_triples
-from lp_rules.lp_anyburl import calc_hit_at_10
-from utils import save2json, does_exist
-
+from common_utils import save2json, does_exist, save_to_file
 
 
 def avg_both(mrrs: Dict[str, float], hits: Dict[str, torch.FloatTensor]):
@@ -73,18 +71,18 @@ def train_and_pred(args):
             print("\t TRAIN: ", train)
             print("\t VALID : ", valid)
     result_test = dataset.eval(model, 'test', -1)
-    print(result_test)
+    save_to_file(str(result_test), args.out_dir + "result.txt")
+    pykeen_dataset = get_dataset(dataset=args.dataset)
     test_scores = dataset.pred(model, 'test', -1, filter=False)
     # test_scores = dataset.pred(model, 'test', -1, filter=True)
-    pykeen_dataset = get_dataset(dataset=args.dataset)
-    eval_groups(pykeen_dataset.testing.mapped_triples, test_scores)
+    # eval_groups(pykeen_dataset.testing.mapped_triples, test_scores)
     torch.save(test_scores, args.out_dir + "preds.pt")
     dev_scores = dataset.pred(model, 'valid', -1, filter=True)
     all_pos_triples = get_all_pos_triples(pykeen_dataset)
     to_fusion_eval_format_and_save_topk(pykeen_dataset.validation.mapped_triples, dev_scores.clone(), all_pos_triples, args.out_dir, top_k=100)
     per_rel_eval(pykeen_dataset.validation.mapped_triples, dev_scores, args.out_dir)
     per_mapping_eval(pykeen_dataset, dev_scores, args.out_dir)
-
+#
 
 def to_fusion_eval_format_and_save_topk(mapped_triples, pred_scores, all_pos_triples, out_dir, top_k=10):
     m_dev_preds = torch.chunk(pred_scores, 2, 1)
@@ -206,7 +204,7 @@ if __name__ == '__main__':
         help="Optimizer in {}".format(optimizers)
     )
     parser.add_argument(
-        '--max_epochs', default=5, type=int,
+        '--max_epochs', default=50, type=int,
         help="Number of epochs."
     )
     parser.add_argument(
@@ -242,7 +240,7 @@ if __name__ == '__main__':
         help="decay rate for second moment estimate in Adam"
     )
     parser.add_argument(
-        '--out_dir', type=str, default="data/UMLS/"
+        '--out_dir', type=str, default="../../outputs/UMLS/CPComplEx/"
     )
     m_args = parser.parse_args()
     train_and_pred(m_args)

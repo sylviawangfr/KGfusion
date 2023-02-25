@@ -74,7 +74,7 @@ class TNormBlender(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_RotatE_TuckER")
+    parser.add_argument('--models', type=str, default="ComplEx_RotatE_TuckER_CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument("--cali", type=str, default="True")

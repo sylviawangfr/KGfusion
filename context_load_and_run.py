@@ -1,6 +1,7 @@
 import logging
 import torch
-import utils
+import common_utils
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +31,21 @@ def load_score_context(model_list, in_dir, calibration=False, evaluator_key=None
 
         if evaluator_key is not None:
             rel_eval = torch.load(read_dir + f"{evaluator_key}_{rel_eval_filename}")
-            h_ent_eval = torch.load(read_dir + f"{evaluator_key}_h_ent_eval.pt")
-            t_ent_eval = torch.load(read_dir + f"{evaluator_key}_t_ent_eval.pt")
+            # h_ent_eval = torch.load(read_dir + f"{evaluator_key}_h_ent_eval.pt")
+            # t_ent_eval = torch.load(read_dir + f"{evaluator_key}_t_ent_eval.pt")
             context_resource[m].update({'rel_eval': rel_eval,
-                                        'h_ent_eval': h_ent_eval,
-                                        't_ent_eval': t_ent_eval})
+                                        # 'h_ent_eval': h_ent_eval,
+                                        # 't_ent_eval': t_ent_eval
+                                        })
     if evaluator_key is not None:
-        releval2idx = utils.load_json(in_dir + f"{evaluator_key}_{releval2idx_filename}")
-        h_ent2idx = utils.load_json(in_dir + f"{evaluator_key}_h_ent2idx.json")
-        t_ent2idx = utils.load_json(in_dir + f"{evaluator_key}_t_ent2idx.json")
+        releval2idx = common_utils.load_json(in_dir + f"{evaluator_key}_{releval2idx_filename}")
+        # h_ent2idx = common_utils.load_json(in_dir + f"{evaluator_key}_h_ent2idx.json")
+        # t_ent2idx = common_utils.load_json(in_dir + f"{evaluator_key}_t_ent2idx.json")
         releval2idx = {int(k): releval2idx[k] for k in releval2idx}
-        h_ent2idx = {int(k): h_ent2idx[k] for k in h_ent2idx}
-        t_ent2idx = {int(k): t_ent2idx[k] for k in t_ent2idx}
+        # h_ent2idx = {int(k): h_ent2idx[k] for k in h_ent2idx}
+        # t_ent2idx = {int(k): t_ent2idx[k] for k in t_ent2idx}
         context_resource.update({'releval2idx': releval2idx,
-                                 'h_ent2idx': h_ent2idx,
-                                 't_ent2idx': t_ent2idx
+                                 # 'h_ent2idx': h_ent2idx,
+                                 # 't_ent2idx': t_ent2idx
                                  })
     return context_resource

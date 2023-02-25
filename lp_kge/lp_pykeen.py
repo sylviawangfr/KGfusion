@@ -23,7 +23,7 @@ from blenders.blender_utils import restore_eval_format
 from lp_kge.grouped_classification_evaluator import GroupededClassificationEvaluator
 from lp_kge.grouped_rank_evaluator import GroupedRankBasedEvaluator
 from lp_kge.patched_classification_evaluator import PatchedClassificationEvaluator
-from utils import save2json
+from common_utils import save2json
 from pykeen.utils import prepare_filter_triples
 
 logger = logging.getLogger(__name__)
@@ -424,8 +424,8 @@ class LpKGE:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
-    # parser.add_argument('--models', type=str, default="NodePiece")
+    # parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
+    parser.add_argument('--models', type=str, default="ComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")

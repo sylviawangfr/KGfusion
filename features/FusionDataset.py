@@ -96,9 +96,9 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
     for target in range(2):
         # restore model scores and index to orginal indexed tensor in shape of [num_model, num_triples, num_candidates + 1]
         # this is an important step to gather scores from multi-models.
-        topk_idx = neg_index[target].squeeze()
+        topk_idx = neg_index[target].squeeze(2)
         max_index = torch.max(topk_idx)  # number of original candidates
-        tmp_scores = neg_scores[target].squeeze()
+        tmp_scores = neg_scores[target].squeeze(2)
         tmp_topk = torch.clone(topk_idx)
         # add one extra column to handle the -999.0/-1 mask values. the masked values are not selected anyway.
         tmp_topk[tmp_topk == -1] = max_index + 1

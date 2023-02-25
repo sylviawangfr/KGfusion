@@ -7,9 +7,8 @@ import torch
 import pandas as pd
 from pykeen.datasets import FB15k237, UMLS, get_dataset
 
-from common_utils import save_to_file, wait_until_file_is_saved, init_dir
+from common_utils import save_to_file, wait_until_file_is_saved, init_dir, save2json
 from lp_kge.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples, find_relation_mappings
-from utils import save2json
 
 
 def read_hrt_pred_anyburl(anyburl_dir, snapshot=100, top_k=10):

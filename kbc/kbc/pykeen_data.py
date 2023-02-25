@@ -1,5 +1,5 @@
 import pandas as pd
-from pykeen.datasets import FB15k237, UMLS, get_dataset
+from pykeen.datasets import FB15k237, UMLS, get_dataset, WN18RR
 import pykeen.datasets
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir
 import os.path as osp
@@ -19,3 +19,4 @@ def mapped_triples_2_kbc(dataset: pykeen.datasets.Dataset, src_data_dir):
 if __name__ == "__main__":
     mapped_triples_2_kbc(UMLS(), "src_data/UMLS/")
     mapped_triples_2_kbc(FB15k237(), "src_data/FB15k237/")
+    mapped_triples_2_kbc(WN18RR(), "src_data/WN18RR/")
