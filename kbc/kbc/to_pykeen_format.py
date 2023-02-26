@@ -46,10 +46,10 @@ def train_and_pred(args):
         'N3': N3(args.reg),
     }[args.regularizer]
 
-    if torch.cuda.is_available():
-        device = resolve_device()
-        print(f"model device: {str(device)}")
-        model.to(device)
+    device = resolve_device()
+    print(f"model device: {str(device)}")
+    model.to(device)
+    examples.to(device)
 
     optim_method = {
         'Adagrad': lambda: optim.Adagrad(model.parameters(), lr=args.learning_rate),
