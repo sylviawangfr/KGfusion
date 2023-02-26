@@ -10,6 +10,7 @@ from typing import Dict
 import pykeen
 import torch
 from pykeen.datasets import get_dataset
+from pykeen.utils import resolve_device
 from torch import optim
 from kbc.datasets import Dataset
 from kbc.models import CP, ComplEx
@@ -46,7 +47,9 @@ def train_and_pred(args):
     }[args.regularizer]
 
     if torch.cuda.is_available():
-        model.to('cuda')
+        device = resolve_device()
+        print(f"model device: {str(device)}")
+        model.to(device)
 
     optim_method = {
         'Adagrad': lambda: optim.Adagrad(model.parameters(), lr=args.learning_rate),

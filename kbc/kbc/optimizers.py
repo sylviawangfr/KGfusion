@@ -31,6 +31,7 @@ class KBCOptimizer(object):
         loss = nn.CrossEntropyLoss(reduction='mean')
         print(f"model device cuda? {str(next(self.model.parameters()).is_cuda)}")
         device = resolve_device()
+        print(f"resolved device: {str(device)}")
         with tqdm.tqdm(total=examples.shape[0], unit='ex', disable=not self.verbose) as bar:
             bar.set_description(f'train loss')
             b_begin = 0
