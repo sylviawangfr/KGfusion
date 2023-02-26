@@ -28,6 +28,7 @@ class KBCOptimizer(object):
     def epoch(self, examples: torch.LongTensor):
         actual_examples = examples[torch.randperm(examples.shape[0]), :]
         loss = nn.CrossEntropyLoss(reduction='mean')
+        print(f"model device cuda? {str(next(self.model.parameters()).is_cuda)}")
         with tqdm.tqdm(total=examples.shape[0], unit='ex', disable=not self.verbose) as bar:
             bar.set_description(f'train loss')
             b_begin = 0
@@ -37,6 +38,7 @@ class KBCOptimizer(object):
                 ]
                 if torch.cuda.is_available():
                     input_batch.cuda()
+                print(f"batch device:{input_batch.get_device()}")
                 predictions, factors = self.model.forward(input_batch)
                 truth = input_batch[:, 2]
 
