@@ -12,7 +12,7 @@ from typing import Dict, Tuple, List
 
 import numpy as np
 import torch
-
+from pykeen.utils import resolve_device
 
 from kbc.models import KBCModel
 
@@ -55,8 +55,7 @@ class Dataset(object):
     ):
         test = self.get_examples(split)
         examples = torch.from_numpy(test.astype('int64'))
-        if torch.cuda.is_available():
-            examples.to('cuda')
+        examples = examples.to(resolve_device())
         missing = [missing_eval]
         if missing_eval == 'both':
             missing = ['rhs', 'lhs']
@@ -88,8 +87,7 @@ class Dataset(object):
     ):
         test = self.get_examples(split)
         examples = torch.from_numpy(test.astype('int64'))
-        if torch.cuda.is_available():
-            examples.to('cuda')
+        examples = examples.to(resolve_device())
         missing = [missing_eval]
         if missing_eval == 'both':
             missing = ['rhs', 'lhs']
