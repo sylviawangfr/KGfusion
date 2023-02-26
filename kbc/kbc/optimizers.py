@@ -40,7 +40,7 @@ class KBCOptimizer(object):
                     b_begin:b_begin + self.batch_size
                 ]
                 input_batch = input_batch.to(device)
-                print(f"batch device:{input_batch.get_device()}")
+                # print(f"batch device:{input_batch.get_device()}")
                 predictions, factors = self.model.forward(input_batch)
                 truth = input_batch[:, 2]
 
