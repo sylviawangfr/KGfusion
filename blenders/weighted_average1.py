@@ -33,8 +33,8 @@ class WeightedAverageBlender1(Blender):
         self.context = load_score_context(self.params['models'],
                                           in_dir=params['work_dir'],
                                           evaluator_key=params['evaluator_key'],
-                                          rel_mapping=params['rel_mapping'],
-                                          calibration=params['cali']=="True"
+                                          eval_feature=params['eval_feature'],
+                                          calibration=True
                                           )
 
     def aggregate_scores(self):
@@ -63,8 +63,8 @@ class WeightedAverageBlender1(Blender):
         str_re = format_result(result)
         option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
                      f"{self.params['evaluator_key']}" \
-                     f"_relMapping{self.params['rel_mapping']}" \
-                     f"_cali{self.params['cali']}_weighted_avg1"
+                     f"evalFeature_{self.params['eval_feature']}" \
+                     f"_weighted_avg1"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -72,20 +72,20 @@ class WeightedAverageBlender1(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE_CPComplEx")
+    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE_CPComplEx_anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")
-    parser.add_argument('--rel_mapping', type=str, default='True')
+    parser.add_argument('--eval_feature', type=str, default='total')
     # "1": PerRelDataset,
     # "2": PerRelBothDataset,
     # "3": ScoresOnlyDataset,
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
-    parser.add_argument('--features', type=int, default=2)  # 1, 2, 4
-    parser.add_argument("--cali", type=str, default="True")
+    # "6": PerModelBothDataset
+    parser.add_argument('--features', type=int, default=6)  # 1, 2, 4, 6
     args = parser.parse_args()
     param1 = args.__dict__
-    param1.update({"models": args.models.split('_'), "rel_mapping": args.rel_mapping == 'True'})
+    param1.update({"models": args.models.split('_')})
     wab = WeightedAverageBlender1(param1)
     wab.aggregate_scores()

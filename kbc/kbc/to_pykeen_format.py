@@ -72,6 +72,12 @@ def train_and_pred(args):
             print("\t VALID : ", valid)
     result_test = dataset.eval(model, 'test', -1)
     save_to_file(str(result_test), args.out_dir + "result.txt")
+    ht = dataset.eval(model, 'valid', -1)
+    both = avg_both(ht[0], ht[1])
+    total_hits = torch.stack([ht[1]['lhs'], ht[1]['rhs'], both['hits@[1,3,10]']], 0)
+    total_mrr = torch.as_tensor([ht[0]['lhs'], ht[0]['rhs'], both['MRR']]).unsqueeze(1)
+    total_eval = torch.cat([total_hits, total_mrr], 1)
+    torch.save(total_eval, args.out_dir + "rank_total_eval.pt")
     pykeen_dataset = get_dataset(dataset=args.dataset)
     test_scores = dataset.pred(model, 'test', -1, filter=False)
     # test_scores = dataset.pred(model, 'test', -1, filter=True)
@@ -95,16 +101,6 @@ def to_fusion_eval_format_and_save_topk(mapped_triples, pred_scores, all_pos_tri
     torch.save(neg_index_topk, out_dir + "eval_neg_index.pt")
 
 
-def eval_groups(mapped_triples, scores):
-    h_preds, t_preds = scores.chunk(2, 1)
-    heads = mapped_triples[:, 0]
-    tails = mapped_triples[:, 2]
-    head_hits = calc_hit_at_k(h_preds, heads)
-    tail_hits = calc_hit_at_k(t_preds, tails)
-    both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
-    print(f"h[{head_hits}, t[{tail_hits}], b[{both_hit}]")
-
-
 def calc_hit_at_k(pred_scores, ground_truth_idx):
     """Calculates mean number of hits@k. Higher values are ranked first.
     Returns: list of float, of the same length as hit_positions, containing
@@ -114,10 +110,12 @@ def calc_hit_at_k(pred_scores, ground_truth_idx):
     targets = pred_scores[torch.arange(0, pred_scores.shape[0]), ground_truth_idx].unsqueeze(1)
     ranks = torch.zeros(pred_scores.shape[0])
     ranks[:] += torch.sum((pred_scores >= targets).float(), dim=1).cpu()
-    hits_at = torch.FloatTensor((list(map(
+    hits_at = list(map(
         lambda x: torch.mean((ranks <= x).float()).item(),
         [1,3,10]
-    ))))
+    ))
+    mrr = torch.mean(1. / ranks).item()
+    hits_at.append(mrr)
     return hits_at
 
 
@@ -138,10 +136,10 @@ def per_rel_eval(mapped_triples, scores, out_dir):
         head_hits = calc_hit_at_k(h_preds, heads)
         tail_hits = calc_hit_at_k(t_preds, tails)
         both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
-        head_tail_eval.append([head_hits[-1],
-                              tail_hits[-1],
-                              both_hit[-1]])
-    head_tail_eval = torch.Tensor(head_tail_eval)
+        head_tail_eval.append(torch.as_tensor([head_hits,
+                              tail_hits,
+                              both_hit]))
+    head_tail_eval = torch.stack(head_tail_eval, 0)
     torch.save(head_tail_eval, out_dir + file_name)
 
 
@@ -168,12 +166,12 @@ def per_mapping_eval(pykeen_dataset, scores, out_dir):
             head_hits = calc_hit_at_k(h_preds, heads)
             tail_hits = calc_hit_at_k(t_preds, tails)
             both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
-            head_tail_eval.append([head_hits[-1],
-                                   tail_hits[-1],
-                                   both_hit[-1]])
+            head_tail_eval.append(torch.as_tensor([head_hits,
+                                   tail_hits,
+                                   both_hit]))
         else:
-            head_tail_eval.append([0.01, 0.01, 0.01])
-    torch.save(torch.Tensor(head_tail_eval), out_dir + f"rank_mapping_rel_eval.pt")
+            head_tail_eval.append(torch.full([3, 4], 0.001))
+    torch.save(torch.stack(head_tail_eval, 0), out_dir + f"rank_mapping_rel_eval.pt")
     if not does_exist(out_dir + f"rank_mapping_releval2idx.json"):
         save2json(relmapping2idx, out_dir + f"rank_mapping_releval2idx.json")
 

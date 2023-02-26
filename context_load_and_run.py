@@ -6,13 +6,15 @@ import common_utils
 logger = logging.getLogger(__name__)
 
 
-def load_score_context(model_list, in_dir, calibration=False, evaluator_key=None, rel_mapping=None):
-    if rel_mapping:
-        rel_eval_filename = "mapping_rel_eval.pt"
+def load_score_context(model_list, in_dir, calibration=False, evaluator_key=None, eval_feature=None):
+    if eval_feature == "rel_mapping":
+        eval_filename = "mapping_rel_eval.pt"
         releval2idx_filename = "mapping_releval2idx.json"
-    else:
-        rel_eval_filename = "rel_eval.pt"
+    elif eval_feature == "rel":
+        eval_filename = "rel_eval.pt"
         releval2idx_filename = "releval2idx.json"
+    else:
+        eval_filename = "total_eval.pt"
     context_resource = {m: {} for m in model_list}
     context_resource.update({'models': model_list})
     for m in model_list:
@@ -30,14 +32,19 @@ def load_score_context(model_list, in_dir, calibration=False, evaluator_key=None
                                'preds': preds}
 
         if evaluator_key is not None:
-            rel_eval = torch.load(read_dir + f"{evaluator_key}_{rel_eval_filename}")
-            # h_ent_eval = torch.load(read_dir + f"{evaluator_key}_h_ent_eval.pt")
-            # t_ent_eval = torch.load(read_dir + f"{evaluator_key}_t_ent_eval.pt")
-            context_resource[m].update({'rel_eval': rel_eval,
-                                        # 'h_ent_eval': h_ent_eval,
-                                        # 't_ent_eval': t_ent_eval
-                                        })
-    if evaluator_key is not None:
+            if eval_feature == "total":
+                rel_eval = torch.load(read_dir + f"{evaluator_key}_{eval_filename}")
+                context_resource[m].update({'total_eval': rel_eval,
+                                            })
+            else:
+                rel_eval = torch.load(read_dir + f"{evaluator_key}_{eval_filename}")
+                # h_ent_eval = torch.load(read_dir + f"{evaluator_key}_h_ent_eval.pt")
+                # t_ent_eval = torch.load(read_dir + f"{evaluator_key}_t_ent_eval.pt")
+                context_resource[m].update({'rel_eval': rel_eval,
+                                                # 'h_ent_eval': h_ent_eval,
+                                                # 't_ent_eval': t_ent_eval
+                                                })
+    if evaluator_key is not None and eval_feature != "total":
         releval2idx = common_utils.load_json(in_dir + f"{evaluator_key}_{releval2idx_filename}")
         # h_ent2idx = common_utils.load_json(in_dir + f"{evaluator_key}_h_ent2idx.json")
         # t_ent2idx = common_utils.load_json(in_dir + f"{evaluator_key}_t_ent2idx.json")

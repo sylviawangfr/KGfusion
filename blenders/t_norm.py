@@ -16,8 +16,7 @@ class TNormBlender(Blender):
         super().__init__(params)
         self.context = load_score_context(self.params['models'],
                                           in_dir=params['work_dir'],
-                                          rel_mapping=False,
-                                          calibration=params['cali']=="True"
+                                          calibration=True
                                           )
 
     def aggregate_scores(self):
@@ -43,7 +42,7 @@ class TNormBlender(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_cali{self.params['cali']}_" \
+        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
                      "simple_avg"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
@@ -77,7 +76,6 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_RotatE_TuckER_CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument("--cali", type=str, default="True")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})

@@ -2,9 +2,9 @@ from collections import defaultdict
 from typing import List, Mapping, MutableMapping, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, Iterable
 import numpy as np
 import torch
-from pykeen.evaluation.rank_based_evaluator import _iter_ranks, RankBasedMetricResults
+from pykeen.evaluation.rank_based_evaluator import _iter_ranks, RankBasedMetricResults, RANKING_METRICS
 from pykeen.evaluation.ranks import Ranks
-from pykeen.metrics.ranking import rank_based_metric_resolver
+from pykeen.metrics.ranking import rank_based_metric_resolver, HITS_METRICS
 from pykeen.evaluation import Evaluator
 from pykeen.typing import Target, RankType, MappedTriples, ExtendedTarget, SIDE_BOTH, RANK_TYPES
 import logging
@@ -56,6 +56,15 @@ def _iter_ranks2(
         yield SIDE_BOTH, rank_type, c_ranks, c_num_candidates, c_weights
 
 
+def get_metric_Setting():
+    resolved = rank_based_metric_resolver.make_many()
+    ks = (1, 3, 10)
+    for hits_at_k_key in ks:
+        hit = rank_based_metric_resolver.make_many(['hitsatk'], [{'k': hits_at_k_key}])
+        resolved.extend(hit)
+    return resolved
+
+
 class GroupedRankBasedEvaluator(Evaluator):
     """A rank-based evaluator for KGE models."""
 
@@ -90,7 +99,7 @@ class GroupedRankBasedEvaluator(Evaluator):
             automatic_memory_optimization=False,
             **kwargs,
         )
-        self.metrics = rank_based_metric_resolver.make_many(['hitsatk'], [{'k': 10}])
+        # self.metrics = rank_based_metric_resolver.make_many(['hitsatk'], [{'k': [1,3,10]}])
         self.ranks = defaultdict(list)
         self.num_candidates = defaultdict(list)
         self.num_entities = None
@@ -132,23 +141,31 @@ class GroupedRankBasedEvaluator(Evaluator):
             g_rank = _select_index(self.all_ranks, g_index)
             g_num_candidates = _select_index(self.all_num_candidates, g_index)
             result = RankBasedMetricResults.from_ranks(
-                metrics=self.metrics,
+                metrics=get_metric_Setting(),
                 rank_and_candidates=_iter_ranks(ranks=g_rank, num_candidates=g_num_candidates),
             )
             tmp_eval = result.data
             if len(self.targets) == 2:
-                group_results.append([tmp_eval[('hits_at_10', 'head', 'realistic')],
-                                      tmp_eval[('hits_at_10', 'tail', 'realistic')],
-                                      tmp_eval[('hits_at_10', 'both', 'realistic')]])
+                group_results.append(torch.as_tensor([
+                    [tmp_eval[('hits_at_1', 'head', 'realistic')], tmp_eval[('hits_at_3', 'head', 'realistic')],
+                     tmp_eval[('hits_at_10', 'head', 'realistic')], tmp_eval[('inverse_harmonic_mean_rank', 'head', 'realistic')]],
+                    [tmp_eval[('hits_at_1', 'tail', 'realistic')], tmp_eval[('hits_at_3', 'tail', 'realistic')],
+                     tmp_eval[('hits_at_10', 'tail', 'realistic')], tmp_eval[('inverse_harmonic_mean_rank', 'tail', 'realistic')]],
+                    [tmp_eval[('hits_at_1', 'both', 'realistic')], tmp_eval[('hits_at_3', 'both', 'realistic')],
+                     tmp_eval[('hits_at_10', 'both', 'realistic')], tmp_eval[('inverse_harmonic_mean_rank', 'both', 'realistic')]]
+                ]))
             else:
-                group_results.append([tmp_eval[('hits_at_10', self.targets[0], 'realistic')]])
+                group_results.append(torch.as_tensor([tmp_eval[('hits_at_1', self.targets[0], 'realistic')],
+                                      tmp_eval[('hits_at_3', self.targets[0], 'realistic')],
+                                      tmp_eval[('hits_at_10', self.targets[0], 'realistic')],
+                                      tmp_eval[('inverse_harmonic_mean_rank', self.targets[0], 'realistic')]]))
 
         # Clear buffers
         self.ranks.clear()
         self.num_candidates.clear()
         self.all_ranks.clear()
         self.all_num_candidates.clear()
-        return GroupedMetricResults({'rank': torch.as_tensor(group_results)})
+        return GroupedMetricResults({'rank': torch.stack(group_results, 0)})
 
     def set_groups(self, index_group, mapped_triples, targets):
         self.index_group = index_group

@@ -9,6 +9,7 @@ from pykeen.datasets import FB15k237, UMLS, get_dataset
 
 from common_utils import save_to_file, wait_until_file_is_saved, init_dir, save2json
 from lp_kge.lp_pykeen import get_neg_scores_top_k, get_all_pos_triples, find_relation_mappings
+from to_pykeen_format import calc_hit_at_k
 
 
 def read_hrt_pred_anyburl(anyburl_dir, snapshot=100, top_k=10):
@@ -39,22 +40,39 @@ def read_hrt_pred_anyburl(anyburl_dir, snapshot=100, top_k=10):
     return file_triples, pred_index, pred_scores
 
 
-def to_fusion_eval_format(dataset: pykeen.datasets.Dataset, file_triples: [], pred_index, pred_scores, all_pos_triples, out_dir, top_k=10):
-    # anyburl doesn't predict in order of input triples, we need sort result to compat with pykeen and reuse pykeen's api to filter all pos triples
-    mapped_triples = dataset.validation.mapped_triples
-    num_candidates = dataset.num_entities
+def eval_groups(mapped_triples, scores_in_pykeen_format):
+    h_preds, t_preds = scores_in_pykeen_format.chunk(2, 1)
+    heads = mapped_triples[:, 0]
+    tails = mapped_triples[:, 2]
+    head_hits = calc_hit_at_k(h_preds.squeeze(), heads)
+    tail_hits = calc_hit_at_k(t_preds.squeeze(), tails)
+    both_hit = calc_hit_at_k(torch.cat([h_preds.squeeze(), t_preds.squeeze()]), torch.cat((heads, tails)))
+    print(f"h[{head_hits}, t[{tail_hits}], b[{both_hit}]")
+    return torch.as_tensor([head_hits, tail_hits, both_hit])
+
+
+def anyburl_to_pykeen_format(mapped_triples, file_triples, num_candidates, pred_index, pred_scores):
     pred_index[pred_index == -1] = num_candidates  # add one extra column to handle mask value/index
     pykeen_scatter_scores = torch.zeros([pred_scores.shape[0], 2, num_candidates + 1]).scatter_(2, pred_index, pred_scores) # sigmoid scores [0-1]
     # get index of triples
     file_index = get_certain_index_in_tensor(mapped_triples, file_triples)
-    eval_preds = torch.zeros([mapped_triples.shape[0], 2, num_candidates])
-    eval_preds[file_index] = pykeen_scatter_scores[:, :, :-1]
-    m_dev_preds = torch.chunk(eval_preds, 2, 1)
+    converted = torch.zeros([mapped_triples.shape[0], 2, num_candidates])
+    converted[file_index] = pykeen_scatter_scores[:, :, :-1]
+    return converted
+
+
+def to_fusion_eval_format(dataset: pykeen.datasets.Dataset, eval_preds_in_pykeen, all_pos_triples, out_dir, top_k=10):
+    # anyburl doesn't predict in order of input triples, we need sort result to compat with pykeen and reuse pykeen's api to filter all pos triples
+    mapped_triples = dataset.validation.mapped_triples
+    total_scores = eval_groups(mapped_triples, eval_preds_in_pykeen)
+    torch.save(torch.as_tensor(total_scores), out_dir + "rank_total_eval.pt")
+    m_dev_preds = torch.chunk(eval_preds_in_pykeen, 2, 1)
     m_dev_preds = [i.squeeze(1) for i in m_dev_preds]
     pos_scores = m_dev_preds[0]
     pos_scores = pos_scores[torch.arange(0, dataset.validation.mapped_triples.shape[0]),
                             dataset.validation.mapped_triples[:, 0]]
     neg_scores, neg_index_topk = get_neg_scores_top_k(dataset.validation.mapped_triples, m_dev_preds, all_pos_triples, top_k) # [[h1 * candidate, h2 * candicate...][t1,t2...]]
+
     torch.save(pos_scores, out_dir + "eval_pos_scores.pt")
     torch.save(neg_scores, out_dir + "eval_neg_scores.pt")
     torch.save(neg_index_topk, out_dir + "eval_neg_index.pt")
@@ -75,110 +93,95 @@ def to_fusion_test_format(dataset, file_triples: [], pred_index, pred_scores, ou
     torch.save(scores, out_dir + "preds.pt")
 
 
-def per_rel_eval(mapped_triples, file_triples: [], pred_index, out_dir):
-    tri_df = pd.DataFrame(data=file_triples, columns=['h', 'r', 't'])
-    pred_rel_groups = tri_df.groupby('r', group_keys=True, as_index=False)
-    triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
-    original_groups = triples_df.groupby('r', group_keys=True, as_index=False)
+def per_rel_eval(mapped_triples, pred_scores, out_dir):
+    original_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
+    original_groups = original_df.groupby('r', group_keys=True, as_index=False)
     ordered_keys = original_groups.groups.keys()
     head_tail_mrr = []
     for rel in ordered_keys:
-        if rel not in pred_rel_groups.groups.keys():
-            head_tail_mrr.append([0, 0, 0])
-        else:
-            rg_tris = pred_rel_groups.get_group(rel)
-            rg_index = torch.as_tensor(rg_tris.index)
-            h_preds, t_preds = pred_index[rg_index].chunk(2, 1)
-            h_preds = h_preds.squeeze(1)
-            t_preds = t_preds.squeeze(1)
-            heads = torch.as_tensor(rg_tris['h'].values).unsqueeze(1)
-            tails = torch.as_tensor(rg_tris['t'].values).unsqueeze(1)
-            head_hits = calc_hit_at_10(h_preds, heads)
-            tail_hits = calc_hit_at_10(t_preds, tails)
-            both_hit = calc_hit_at_10(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
-            head_tail_mrr.append([head_hits,
-                                  tail_hits,
-                                  both_hit])
-    head_tail_mrr = torch.Tensor(head_tail_mrr)
+        rg_tris = original_groups.get_group(rel)
+        rg_index = torch.as_tensor(rg_tris.index)
+        h_preds, t_preds = pred_scores[rg_index].chunk(2, 1)
+        h_preds = h_preds.squeeze(1)
+        t_preds = t_preds.squeeze(1)
+        heads = torch.as_tensor(rg_tris['h'].values)
+        tails = torch.as_tensor(rg_tris['t'].values)
+        head_hits = calc_hit_at_k(h_preds, heads)
+        tail_hits = calc_hit_at_k(t_preds, tails)
+        both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+        head_tail_mrr.append(torch.as_tensor([head_hits,
+                              tail_hits,
+                              both_hit]))
+    head_tail_mrr = torch.stack(head_tail_mrr, 0)
     torch.save(head_tail_mrr, out_dir + "rank_rel_eval.pt")
 
 
-def per_ent_eval(mapped_triples, file_triples: [], pred_index, out_dir):
-    original_triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
-    original_groups_h = original_triples_df.groupby('h', group_keys=True, as_index=False)
-    original_groups_t = original_triples_df.groupby('t', group_keys=True, as_index=False)
-    ordered_keys_h = original_groups_h.groups.keys()
-    ordered_keys_t = original_groups_t.groups.keys()
-    triples_df = pd.DataFrame(data=file_triples, columns=['h', 'r', 't'])
-    h_groups = triples_df.groupby('h', group_keys=True, as_index=False)
-    h_ent2idx = {key: idx for idx, key in enumerate(ordered_keys_h)}
-    t_groups = triples_df.groupby('t', group_keys=True, as_index=False)
-    t_ent2idx = {key: idx for idx, key in enumerate(ordered_keys_t)}
-    h_ent_eval = []
-    t_ent_eval = []
-    for h in ordered_keys_h:
-        if h not in h_groups.groups.keys():
-            h_ent_eval.append(0)
-        else:
-            rg_tris = h_groups.get_group(h)
-            rg_index = torch.as_tensor(rg_tris.index)
-            h_preds, t_preds = pred_index[rg_index].chunk(2, 1)
-            t_preds = t_preds.squeeze(1)
-            tails = torch.as_tensor(rg_tris['t'].values).unsqueeze(1)
-            tail_hits = calc_hit_at_10(t_preds, tails)
-            h_ent_eval.append(tail_hits)
-    for t in ordered_keys_t:
-        if t not in t_groups.groups.keys():
-            t_ent_eval.append(0)
-        else:
-            rg_tris = t_groups.get_group(t)
-            rg_index = torch.as_tensor(rg_tris.index)
-            h_preds, t_preds = pred_index[rg_index].chunk(2, 1)
-            h_preds = h_preds.squeeze(1)
-            heads = torch.as_tensor(rg_tris['h'].values).unsqueeze(1)
-            head_hits = calc_hit_at_10(h_preds, heads)
-            t_ent_eval.append(head_hits)
-    torch.save(torch.Tensor(h_ent_eval), out_dir + "rank_h_ent_eval.pt")
-    torch.save(torch.Tensor(t_ent_eval), out_dir + "rank_t_ent_eval.pt")
-    save2json(h_ent2idx, out_dir + "rank_h_ent2idx.json")
-    save2json(t_ent2idx, out_dir + "rank_t_ent2idx.json")
+# def per_ent_eval(mapped_triples, file_triples: [], pred_scores, out_dir):
+#     original_triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
+#     original_groups_h = original_triples_df.groupby('h', group_keys=True, as_index=False)
+#     original_groups_t = original_triples_df.groupby('t', group_keys=True, as_index=False)
+#     ordered_keys_h = original_groups_h.groups.keys()
+#     ordered_keys_t = original_groups_t.groups.keys()
+#     triples_df = pd.DataFrame(data=file_triples, columns=['h', 'r', 't'])
+#     h_groups = triples_df.groupby('h', group_keys=True, as_index=False)
+#     h_ent2idx = {key: idx for idx, key in enumerate(ordered_keys_h)}
+#     t_groups = triples_df.groupby('t', group_keys=True, as_index=False)
+#     t_ent2idx = {key: idx for idx, key in enumerate(ordered_keys_t)}
+#     h_ent_eval = []
+#     t_ent_eval = []
+#     for h in ordered_keys_h:
+#         if h not in h_groups.groups.keys():
+#             h_ent_eval.append(0)
+#         else:
+#             rg_tris = h_groups.get_group(h)
+#             rg_index = torch.as_tensor(rg_tris.index)
+#             h_preds, t_preds = pred_scores[rg_index].chunk(2, 1)
+#             t_preds = t_preds.squeeze(1)
+#             tails = torch.as_tensor(rg_tris['t'].values)
+#             tail_hits = calc_hit_at_k(t_preds, tails)
+#             h_ent_eval.append(torch.as_tensor(tail_hits))
+#     for t in ordered_keys_t:
+#         if t not in t_groups.groups.keys():
+#             t_ent_eval.append(0)
+#         else:
+#             rg_tris = t_groups.get_group(t)
+#             rg_index = torch.as_tensor(rg_tris.index)
+#             h_preds, t_preds = pred_scores[rg_index].chunk(2, 1)
+#             h_preds = h_preds.squeeze(1)
+#             heads = torch.as_tensor(rg_tris['h'].values)
+#             head_hits = calc_hit_at_k(h_preds, heads)
+#             t_ent_eval.append(torch.as_tensor(head_hits))
+#     torch.save(torch.stack(h_ent_eval, 0), out_dir + "rank_h_ent_eval.pt")
+#     torch.save(torch.stack(t_ent_eval, 0), out_dir + "rank_t_ent_eval.pt")
+#     save2json(h_ent2idx, out_dir + "rank_h_ent2idx.json")
+#     save2json(t_ent2idx, out_dir + "rank_t_ent2idx.json")
 
 
-def per_mapping_eval(dataset, file_triples: [], pred_index, out_dir):
+def per_mapping_eval(dataset, pred_scores, out_dir):
     mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
     rel_mappings = find_relation_mappings(dataset)
-    tri_df = pd.DataFrame(data=file_triples, columns=['h', 'r', 't'])
+    tri_df = pd.DataFrame(data=dataset.validation.mapped_triples.numpy(), columns=['h', 'r', 't'])
     head_tail_mrr = []
     for rel_group in mappings:
         tmp_rels = rel_mappings[rel_group]
         rg_tris = tri_df.query('r in @tmp_rels')
         if len(rg_tris.index) > 0:
             rg_index = torch.as_tensor(rg_tris.index)
-            h_preds, t_preds = pred_index[rg_index].chunk(2, 1)
+            h_preds, t_preds = pred_scores[rg_index].chunk(2, 1)
             h_preds = h_preds.squeeze(1)
             t_preds = t_preds.squeeze(1)
-            heads = torch.as_tensor(rg_tris['h'].values).unsqueeze(1)
-            tails = torch.as_tensor(rg_tris['t'].values).unsqueeze(1)
-            head_hits = calc_hit_at_10(h_preds, heads)
-            tail_hits = calc_hit_at_10(t_preds, tails)
-            both_hit = calc_hit_at_10(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
-            head_tail_mrr.append([head_hits,
+            heads = torch.as_tensor(rg_tris['h'].values)
+            tails = torch.as_tensor(rg_tris['t'].values)
+            head_hits = calc_hit_at_k(h_preds, heads)
+            tail_hits = calc_hit_at_k(t_preds, tails)
+            both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+            head_tail_mrr.append(torch.as_tensor([head_hits,
                                   tail_hits,
-                                  both_hit])
+                                  both_hit]))
         else:
-            head_tail_mrr.append([0.01, 0.01, 0.01])
-    head_tail_mrr = torch.Tensor(head_tail_mrr)
+            head_tail_mrr.append(torch.full([3, 4], 0.001))
+    head_tail_mrr = torch.stack(head_tail_mrr, 0)
     torch.save(head_tail_mrr, out_dir + "rank_mapping_rel_eval.pt")
-
-
-def calc_hit_at_10(pred_idx, ground_truth_idx):
-    """Calculates mean number of hits@k. Higher values are ranked first.
-    Returns: list of float, of the same length as hit_positions, containing
-        Hits@K score.
-    """
-    idx_at_10 = pred_idx[:, :10]
-    hits_at_10 = (idx_at_10 == ground_truth_idx).sum(dim=1).float().mean()
-    return hits_at_10.item()
 
 
 def get_certain_index_in_tensor(src_tensor, target):
@@ -192,12 +195,13 @@ def get_certain_index_in_tensor(src_tensor, target):
 
 def mapped_triples_2_anyburl_hrt_dev(dataset: pykeen.datasets.Dataset, anyburl_dir):
     init_dir(anyburl_dir)
+    clean_anyburl_tmp_files(anyburl_dir)
     df_train = pd.DataFrame(dataset.training.mapped_triples.numpy()).astype('int64')
     df_train.to_csv(osp.join(anyburl_dir, f'train.txt'), header=False, index=False, sep='\t')
     df_dev = pd.DataFrame(dataset.validation.mapped_triples.numpy()).astype('int64')
     df_dev.to_csv(osp.join(anyburl_dir, f'valid.txt'), header=False, index=False, sep='\t')
     # use dev as blender training set
-    df_test = pd.DataFrame(dataset.testing.mapped_triples.numpy()).astype('int64')
+    df_test = pd.DataFrame(dataset.validation.mapped_triples.numpy()).astype('int64')
     df_test.to_csv(osp.join(anyburl_dir, f'test.txt'), header=False, index=False, sep='\t')
     wait_until_anyburl_data_ready(anyburl_dir)
 
@@ -238,6 +242,7 @@ def clean_anyburl_tmp_files(anyburl_dir):
     init_dir(f"{anyburl_dir}last_round/")
     os.system(f"[ -f {anyburl_dir}predictions/alpha* ] && mv {anyburl_dir}predictions/* {anyburl_dir}last_round/")
     os.system(f"[ -f {anyburl_dir}anyburl_eval.log ] && rm {anyburl_dir}anyburl_eval.log")
+    os.system(f"[ -f {anyburl_dir}test.txt ] && rm {anyburl_dir}test.txt")
 
 
 def wait_until_anyburl_data_ready(anyburl_dir):
@@ -274,14 +279,16 @@ class LpAnyBURL:
     def dev_pred(self, snapshot, top_k):
         mapped_triples_2_anyburl_hrt_dev(self.dataset, self.work_dir)
         prepare_anyburl_configs(self.work_dir, snapshot=snapshot, top_k=top_k)
-        learn_anyburl(self.work_dir, snapshot=snapshot)
+        # learn_anyburl(self.work_dir, snapshot=snapshot)
         predict_with_anyburl(self.work_dir, snapshot=snapshot)
         file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, snapshot=snapshot, top_k=top_k)
+        pykeen_formated = anyburl_to_pykeen_format(self.dataset.validation.mapped_triples, file_triples,
+                                                   self.dataset.num_entities, pred_index, pred_scores)
         all_pos_triples = get_all_pos_triples(self.dataset)
-        to_fusion_eval_format(self.dataset, file_triples, pred_index, pred_scores, all_pos_triples, self.work_dir, top_k)
-        per_rel_eval(self.dataset.validation.mapped_triples, file_triples, pred_index, self.work_dir)
-        per_mapping_eval(dataset=self.dataset, file_triples=file_triples, pred_index=pred_index, out_dir=self.work_dir)
-        per_ent_eval(self.dataset.validation.mapped_triples, file_triples, pred_index, self.work_dir)
+        to_fusion_eval_format(self.dataset, pykeen_formated.clone(), all_pos_triples, self.work_dir, top_k)
+        per_rel_eval(self.dataset.validation.mapped_triples, pykeen_formated, self.work_dir)
+        per_mapping_eval(dataset=self.dataset, pred_scores=pykeen_formated, out_dir=self.work_dir)
+        # per_ent_eval(self.dataset.validation.mapped_triples, file_triples, pred_scores, self.work_dir)
 
     def test_pred(self, snapshot, top_k):
         clean_anyburl_tmp_files(self.work_dir)
@@ -294,7 +301,7 @@ class LpAnyBURL:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--snapshot', type=int, default=1000)
+    parser.add_argument('--snapshot', type=int, default=100)
     parser.add_argument('--top_k', type=int, default=100)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/anyburl/")
     args = parser.parse_args()

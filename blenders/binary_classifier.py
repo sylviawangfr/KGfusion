@@ -29,8 +29,8 @@ names = [
     # "RandomForest",
     "NeuralNet",
     # "AdaBoost",
-    "NaiveBayes",
-    "QDA",
+    # "NaiveBayes",
+    # "QDA",
 ]
 
 classifiers = [
@@ -42,8 +42,8 @@ classifiers = [
     # RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
     MLPClassifier(alpha=1, max_iter=500),
     # AdaBoostClassifier(),
-    GaussianNB(),
-    QuadraticDiscriminantAnalysis(),
+    # GaussianNB(),
+    # QuadraticDiscriminantAnalysis(),
 ]
 
 

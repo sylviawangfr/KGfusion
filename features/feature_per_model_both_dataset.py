@@ -5,18 +5,13 @@ import torch
 from features.FusionDataset import FusionDataset, get_multi_model_neg_topk
 
 
-class PerRelBothDataset(FusionDataset):
+class PerModelBothDataset(FusionDataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
     def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
         self.dim = len(context_resource['models']) * 2
 
-    def _get_rel_eval_scores(self, model_rel_eval, rel2idx):
-        rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
-        rel_idx = rel_mapped.applymap(lambda x: rel2idx[x] if x in rel2idx else -1)
-        rel_b_eval = model_rel_eval[rel_idx.to_numpy(), 2, 0] # the model_rel_eval is in shape [group_num, 3, 4]
-        return rel_b_eval
 
     def generate_training_input_feature(self):
         #   [m1_score, m2_score, ... ]
@@ -35,8 +30,9 @@ class PerRelBothDataset(FusionDataset):
             scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
             neg_index_topk_times.append(m_neg_index_topk4)
             # model eval
-            m_b_eval = self._get_rel_eval_scores(m_context['rel_eval'], self.context_resource['rel2idx'])
-            both_eval.append(m_b_eval)
+            m_hrb_eval = m_context['total_eval']
+            m_b_eval = m_hrb_eval[2, 3]
+            both_eval.append(m_b_eval.repeat(scores_pos.shape[0], 0))
         # # pos feature [m1_eval, m2_eva., ... m1_s1,m2_s1,....]
         scores_pos = torch.vstack(scores_pos).T
         # neg feature
@@ -61,11 +57,12 @@ class PerRelBothDataset(FusionDataset):
             m_h_preds, m_t_preds = torch.chunk(m_preds, 2, 1)
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))
             tail_scores.append(torch.flatten(m_t_preds, start_dim=0, end_dim=1))
-            m_b_eval = self._get_rel_eval_scores(m_context['rel_eval'], self.context_resource['releval2idx'])
+            m_b_eval = m_context['total_eval'][2, 3]
             both_eval.append(m_b_eval)
 
         candidate_num = int(head_scores[0].shape[0] / self.mapped_triples.shape[0])
-        eval_feature = torch.hstack(both_eval).repeat((1, candidate_num)).reshape([candidate_num * self.mapped_triples.shape[0], num_models])
+        both_eval = torch.as_tensor(both_eval).repeat(self.mapped_triples.shape[0], 1)
+        eval_feature = both_eval.repeat((1, candidate_num)).reshape([candidate_num * self.mapped_triples.shape[0], num_models])
         head_scores = torch.vstack(head_scores).T
         tail_scores = torch.vstack(tail_scores).T
         h_features = torch.concat([eval_feature, head_scores], 1)

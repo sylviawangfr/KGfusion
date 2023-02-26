@@ -16,7 +16,7 @@ class WeightedAverageBlender2(Blender):
                                           in_dir=params['work_dir'],
                                           evaluator_key=params['evaluator_key'],
                                           rel_mapping=False,
-                                          calibration=params['cali']=="True"
+                                          calibration=True
                                           )
 
     def _p1(self, t1, t2):
@@ -57,7 +57,7 @@ class WeightedAverageBlender2(Blender):
         result = evaluator.finalize()
         str_re = format_result(result)
         option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
-                     f"{self.params['evaluator_key']}_cali{self.params['cali']}_weighted_avg2"
+                     f"{self.params['evaluator_key']}_weighted_avg2"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -69,7 +69,6 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")
-    parser.add_argument("--cali", type=str, default="False")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})

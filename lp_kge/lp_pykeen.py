@@ -118,44 +118,6 @@ def predict_head_tail_scores(
     return model_sample_results.detach().cpu()
 
 
-# def find_clusters(model: Model,
-#                   mapped_triples,
-#                   all_pos_triples=None,
-#                   top_k=10
-#                   ):
-#     eval_preds = predict_head_tail_scores(model, mapped_triples,
-#                                           mode=None)  # head_preds + t_preds
-#     dev_predictions = torch.chunk(eval_preds, 2, 1)
-#     pos_scores = dev_predictions[0]
-#     pos_scores = pos_scores[torch.arange(0, mapped_triples.shape[0]),
-#                             mapped_triples[:, 0]]
-#     # pos_scores = torch.unsqueeze(pos_scores, 1)
-#     targets = [COLUMN_HEAD, COLUMN_TAIL]
-#     ht_hits = []
-#     ht_fails = []
-#     for index in range(2):
-#         # exclude positive triples
-#         positive_filter, _ = create_sparse_positive_filter_(
-#             hrt_batch=mapped_triples,
-#             all_pos_triples=all_pos_triples,
-#             relation_filter=None,
-#             filter_col=targets[index],
-#         )
-#         scores = filter_scores_(scores=dev_predictions[index], filter_batch=positive_filter)
-#         # The scores for the true triples have to be rewritten to the scores tensor
-#         scores[torch.arange(0, mapped_triples.shape[0]), mapped_triples[:, targets[index]]] = pos_scores
-#         select_range = top_k if top_k < scores.shape[-1] else scores.shape[-1]
-#         scores_k, indices_k = torch.nan_to_num(scores, nan=-999.).topk(k=select_range)
-#         hits = (scores_k == torch.unsqueeze(pos_scores, -1))
-#         hit_index = torch.unique(hits.nonzero()[:, 0])
-#         triple_index = torch.arange(0, mapped_triples.shape[0])
-#         combined = torch.cat((hit_index, triple_index))
-#         uniques, counts = combined.unique(return_counts=True)
-#         fail_index = uniques[counts == 1]
-#         ht_hits.append(hit_index.detach().cpu())
-#         ht_fails.append(fail_index.detach().cpu())
-#     return ht_hits, ht_fails
-
 def get_evaluator_cls(keyword="f1"):
     clz = {
         "f1": GroupededClassificationEvaluator,
@@ -171,29 +133,38 @@ def get_evaluator_func(keyword="f1"):
 
 
 def rank_hits_evaluate(model: Model,
-                            mapped_triples,
-                            batch_size: Optional[int] = None,
-                            slice_size: Optional[int] = None,
-                            **kwargs,
-                            ):
-    targets = kwargs["targets"]
-    evaluator = RankBasedEvaluator()
-    metrix_result_g = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
-    tmp_eval = metrix_result_g.data
-    if len(targets) == 2:
-        return [tmp_eval[('hits_at_10', 'head', 'realistic')],
-                              tmp_eval[('hits_at_10', 'tail', 'realistic')],
-                              tmp_eval[('hits_at_10', 'both', 'realistic')]]
-    else:
-        return [tmp_eval[('hits_at_10', targets[0], 'realistic')]]
-
-
-def classification_evaluate(model: Model,
                        mapped_triples,
                        batch_size: Optional[int] = None,
                        slice_size: Optional[int] = None,
                        **kwargs,
                        ):
+    targets = kwargs["targets"]
+    evaluator = RankBasedEvaluator()
+    metrix_result_g = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
+    tmp_eval = metrix_result_g.data
+    if len(targets) == 2:
+        result = [
+            [tmp_eval[('hits_at_1', 'head', 'realistic')], tmp_eval[('hits_at_3', 'head', 'realistic')],
+             tmp_eval[('hits_at_10', 'head', 'realistic')], tmp_eval[('inverse_harmonic_mean_rank', 'head', 'realistic')]],
+            [tmp_eval[('hits_at_1', 'tail', 'realistic')], tmp_eval[('hits_at_3', 'tail', 'realistic')],
+             tmp_eval[('hits_at_10', 'tail', 'realistic')], tmp_eval[('inverse_harmonic_mean_rank', 'tail', 'realistic')]],
+            [tmp_eval[('hits_at_1', 'both', 'realistic')], tmp_eval[('hits_at_3', 'both', 'realistic')],
+             tmp_eval[('hits_at_10', 'both', 'realistic')], tmp_eval[('inverse_harmonic_mean_rank', 'both', 'realistic')]]
+        ]
+    else:
+        result = [tmp_eval[('hits_at_1', targets[0], 'realistic')],
+                tmp_eval[('hits_at_3', targets[0], 'realistic')],
+                tmp_eval[('hits_at_10', targets[0], 'realistic')],
+                tmp_eval[('inverse_harmonic_mean_rank', targets[0], 'realistic')]]
+    return torch.as_tensor(result)
+
+
+def classification_evaluate(model: Model,
+                            mapped_triples,
+                            batch_size: Optional[int] = None,
+                            slice_size: Optional[int] = None,
+                            **kwargs,
+                            ):
     targets = kwargs['targets']
     result = []
     score_key = "f1_score"
@@ -201,7 +172,8 @@ def classification_evaluate(model: Model,
         for t in targets:
             evaluator = PatchedClassificationEvaluator()
             kwargs.update({"targets": [t]})
-            metrix_result = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size, **kwargs)
+            metrix_result = evaluator.evaluate(model, mapped_triples, batch_size=batch_size, slice_size=slice_size,
+                                               **kwargs)
             result.append(metrix_result.data[score_key])
     evaluator = PatchedClassificationEvaluator()
     kwargs.update({"targets": targets})
@@ -290,6 +262,21 @@ class LpKGE:
         self.dataset = get_dataset(dataset=dataset)
         self.models = models
         self.work_dir = work_dir
+
+    def dev_eval(self):
+        mapped_triples_eval = self.dataset.validation.mapped_triples
+        device: torch.device = resolve_device()
+        logger.info(f"Using device: {device}")
+        evaluation_kwargs = {"additional_filter_triples": get_additional_filter_triples(False, self.dataset.training),
+                             "targets": [LABEL_HEAD, LABEL_TAIL]}
+        for m in self.models:
+            m_dir = self.work_dir + m + "/checkpoint/trained_model.pkl"
+            m_out_dir = self.work_dir + m + "/"
+            single_model = torch.load(m_dir)
+            single_model = single_model.to(device)
+            model_eval = rank_hits_evaluate(single_model, mapped_triples_eval, **evaluation_kwargs)
+            print(model_eval)
+            torch.save(model_eval, m_out_dir + f"rank_total_eval.pt")
 
     def dev_rel_eval(self, evaluator_key):
         mapped_triples_eval = self.dataset.validation.mapped_triples
@@ -390,9 +377,9 @@ class LpKGE:
                     group_eval = evaluator_fun(single_model, mapped_group, **evaluation_kwargs)
                     model_eval.append(group_eval)
                 else:
-                    model_eval.append([0.01, 0.01, 0.01])
+                    model_eval.append(torch.full([3,4], 0.001))
             print(model_eval)
-            torch.save(torch.Tensor(model_eval), m_out_dir + f"{evaluator_key}_mapping_rel_eval.pt")
+            torch.save(torch.stack(model_eval, 0), m_out_dir + f"{evaluator_key}_mapping_rel_eval.pt")
         save2json(relmapping2idx, self.work_dir + f"{evaluator_key}_mapping_releval2idx.json")
 
     def predict_scores(self, top_k):
@@ -424,8 +411,8 @@ class LpKGE:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    # parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
-    parser.add_argument('--models', type=str, default="ComplEx")
+    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE")
+    # parser.add_argument('--models', type=str, default="ComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")
@@ -434,9 +421,8 @@ if __name__ == '__main__':
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     eval_key = param1['evaluator_key']
+    pykeen_lp.dev_eval()
     pykeen_lp.dev_rel_eval(eval_key)
-    pykeen_lp.dev_ent_eval(eval_key)
+    # pykeen_lp.dev_ent_eval(eval_key)
     pykeen_lp.dev_mapping_eval(eval_key)
     pykeen_lp.predict_scores(top_k=100)
-
-
