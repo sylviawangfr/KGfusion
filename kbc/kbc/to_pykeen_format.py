@@ -47,6 +47,7 @@ def train_and_pred(args):
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
+        examples.to(device)
         model.to(device)
 
     optim_method = {

@@ -1,7 +1,7 @@
 import pandas as pd
-from pykeen.datasets import FB15k237, UMLS, get_dataset, WN18RR
+from pykeen.datasets import FB15k237, UMLS, WN18RR
 import pykeen.datasets
-from common_utils import save_to_file, wait_until_file_is_saved, init_dir
+from common_utils import init_dir
 import os.path as osp
 
 

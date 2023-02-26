@@ -110,11 +110,11 @@ class Dataset(object):
                 scores = model.get_preds(q, self.to_skip[m])
             else:
                 scores = model.get_preds(q)
-            reordered_scores = kbc_to_pykeen_scores(scores, kbc2pykeen)
+            reordered_scores = kbc_to_pykeen_scores(scores.detach().cpu(), kbc2pykeen)
             h_t_preds.append(reordered_scores)
         h_t_preds.reverse()
         ht = torch.cat(h_t_preds, 1)
-        return ht.detach().cpu()
+        return ht
 
     def get_shape(self):
         return self.n_entities, self.n_predicates, self.n_entities
