@@ -7,6 +7,7 @@
 
 import tqdm
 import torch
+from pykeen.utils import resolve_device
 from torch import nn
 from torch import optim
 
@@ -29,6 +30,7 @@ class KBCOptimizer(object):
         actual_examples = examples[torch.randperm(examples.shape[0]), :]
         loss = nn.CrossEntropyLoss(reduction='mean')
         print(f"model device cuda? {str(next(self.model.parameters()).is_cuda)}")
+        device = resolve_device()
         with tqdm.tqdm(total=examples.shape[0], unit='ex', disable=not self.verbose) as bar:
             bar.set_description(f'train loss')
             b_begin = 0
@@ -36,8 +38,7 @@ class KBCOptimizer(object):
                 input_batch = actual_examples[
                     b_begin:b_begin + self.batch_size
                 ]
-                if torch.cuda.is_available():
-                    input_batch.to('cuda')
+                input_batch.to(device)
                 print(f"batch device:{input_batch.get_device()}")
                 predictions, factors = self.model.forward(input_batch)
                 truth = input_batch[:, 2]
