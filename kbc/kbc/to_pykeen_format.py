@@ -49,7 +49,7 @@ def train_and_pred(args):
     device = resolve_device()
     print(f"model device: {str(device)}")
     model.to(device)
-    examples.to(device)
+    # examples.to(device)
 
     optim_method = {
         'Adagrad': lambda: optim.Adagrad(model.parameters(), lr=args.learning_rate),
