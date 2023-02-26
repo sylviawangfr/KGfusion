@@ -37,7 +37,7 @@ class KBCOptimizer(object):
                     b_begin:b_begin + self.batch_size
                 ]
                 if torch.cuda.is_available():
-                    input_batch.cuda()
+                    input_batch.to('cuda')
                 print(f"batch device:{input_batch.get_device()}")
                 predictions, factors = self.model.forward(input_batch)
                 truth = input_batch[:, 2]

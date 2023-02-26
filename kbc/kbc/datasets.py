@@ -56,7 +56,7 @@ class Dataset(object):
         test = self.get_examples(split)
         examples = torch.from_numpy(test.astype('int64'))
         if torch.cuda.is_available():
-            examples.cuda()
+            examples.to('cuda')
         missing = [missing_eval]
         if missing_eval == 'both':
             missing = ['rhs', 'lhs']
@@ -89,7 +89,7 @@ class Dataset(object):
         test = self.get_examples(split)
         examples = torch.from_numpy(test.astype('int64'))
         if torch.cuda.is_available():
-            examples.cuda()
+            examples.to('cuda')
         missing = [missing_eval]
         if missing_eval == 'both':
             missing = ['rhs', 'lhs']
