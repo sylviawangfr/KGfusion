@@ -46,8 +46,7 @@ def train_and_pred(args):
     }[args.regularizer]
 
     if torch.cuda.is_available():
-        device = torch.device("cuda")
-        model.to(device)
+        model.to('cuda')
 
     optim_method = {
         'Adagrad': lambda: optim.Adagrad(model.parameters(), lr=args.learning_rate),

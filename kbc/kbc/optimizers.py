@@ -37,7 +37,6 @@ class KBCOptimizer(object):
                 ]
                 if torch.cuda.is_available():
                     input_batch.cuda()
-
                 predictions, factors = self.model.forward(input_batch)
                 truth = input_batch[:, 2]
 
