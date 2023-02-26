@@ -39,7 +39,7 @@ class KBCOptimizer(object):
                 input_batch = actual_examples[
                     b_begin:b_begin + self.batch_size
                 ]
-                input_batch.to("cuda:0")
+                input_batch.to(device)
                 print(f"batch device:{input_batch.get_device()}")
                 predictions, factors = self.model.forward(input_batch)
                 truth = input_batch[:, 2]
