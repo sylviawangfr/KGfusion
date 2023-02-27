@@ -195,6 +195,8 @@ def get_certain_index_in_tensor(src_tensor, target):
 
 def mapped_triples_2_anyburl_hrt_dev(dataset: pykeen.datasets.Dataset, anyburl_dir):
     init_dir(anyburl_dir)
+    init_dir(anyburl_dir + 'predictions/')
+    init_dir(anyburl_dir + 'rules/')
     clean_anyburl_tmp_files(anyburl_dir)
     df_train = pd.DataFrame(dataset.training.mapped_triples.numpy()).astype('int64')
     df_train.to_csv(osp.join(anyburl_dir, f'train.txt'), header=False, index=False, sep='\t')
