@@ -281,7 +281,7 @@ class LpAnyBURL:
     def dev_pred(self, snapshot, top_k):
         mapped_triples_2_anyburl_hrt_dev(self.dataset, self.work_dir)
         prepare_anyburl_configs(self.work_dir, snapshot=snapshot, top_k=top_k)
-        # learn_anyburl(self.work_dir, snapshot=snapshot)
+        learn_anyburl(self.work_dir, snapshot=snapshot)
         predict_with_anyburl(self.work_dir, snapshot=snapshot)
         file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, snapshot=snapshot, top_k=top_k)
         pykeen_formated = anyburl_to_pykeen_format(self.dataset.validation.mapped_triples, file_triples,
