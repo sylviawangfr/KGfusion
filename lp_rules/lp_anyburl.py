@@ -303,7 +303,7 @@ class LpAnyBURL:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--snapshot', type=int, default=100)
+    parser.add_argument('--snapshot', type=int, default=1000)
     parser.add_argument('--top_k', type=int, default=100)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/anyburl/")
     args = parser.parse_args()
