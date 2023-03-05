@@ -14,7 +14,7 @@
     "regularizer": "Lp",
     "regularizer_kwargs": {
       "apply_only_once": false,
-      "weight": 0.01,
+      "weight": 0.001,
       "p": 2.0,
       "normalize": false
     },
@@ -29,7 +29,7 @@
     "training_loop": "SLCWA",
     "negative_sampler": "basic",
     "negative_sampler_kwargs": {
-      "num_negs_per_pos": 10
+      "num_negs_per_pos": 32
     },
     "training_kwargs": {
       "num_epochs": 1000,
