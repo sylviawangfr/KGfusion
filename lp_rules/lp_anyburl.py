@@ -44,14 +44,15 @@ def eval_groups(mapped_triples, scores_in_pykeen_format):
     h_preds, t_preds = scores_in_pykeen_format.chunk(2, 1)
     heads = mapped_triples[:, 0]
     tails = mapped_triples[:, 2]
-    head_hits = calc_hit_at_k(h_preds.squeeze(), heads)
-    tail_hits = calc_hit_at_k(t_preds.squeeze(), tails)
-    both_hit = calc_hit_at_k(torch.cat([h_preds.squeeze(), t_preds.squeeze()]), torch.cat((heads, tails)))
+    head_hits = calc_hit_at_k(h_preds, heads)
+    tail_hits = calc_hit_at_k(t_preds, tails)
+    both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
     print(f"h[{head_hits}, t[{tail_hits}], b[{both_hit}]")
     return torch.as_tensor([head_hits, tail_hits, both_hit])
 
 
 def anyburl_to_pykeen_format(mapped_triples, num_candidates, anyburl_dir, snapshot=100, top_k=10):
+    # [num_tri, h_scores + t_scores]
     file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, snapshot, top_k)
     pred_index[pred_index == -1] = num_candidates  # add one extra column to handle mask value/index
     pykeen_scatter_scores = torch.zeros([pred_scores.shape[0], 2, num_candidates + 1]).scatter_(2, pred_index, pred_scores) # sigmoid scores [0-1]
@@ -59,7 +60,9 @@ def anyburl_to_pykeen_format(mapped_triples, num_candidates, anyburl_dir, snapsh
     file_index = get_index_of_a_in_b(file_triples, mapped_triples)
     converted = torch.zeros([mapped_triples.shape[0], 2, num_candidates])
     converted[file_index] = pykeen_scatter_scores[:, :, :-1]
-    return converted
+    ht = torch.chunk(converted, 2, 1)
+    ht_converted = torch.cat([ht[0].squeeze(1), ht[1].squeeze(1)], 1)
+    return ht_converted
 
 
 def to_fusion_eval_format(dataset: pykeen.datasets.Dataset, eval_preds_in_pykeen, all_pos_triples, out_dir, top_k=10):
@@ -68,7 +71,6 @@ def to_fusion_eval_format(dataset: pykeen.datasets.Dataset, eval_preds_in_pykeen
     total_scores = eval_groups(mapped_triples, eval_preds_in_pykeen)
     torch.save(torch.as_tensor(total_scores), out_dir + "rank_total_eval.pt")
     m_dev_preds = torch.chunk(eval_preds_in_pykeen, 2, 1)
-    m_dev_preds = [i.squeeze(1) for i in m_dev_preds]
     pos_scores = m_dev_preds[0]
     pos_scores = pos_scores[torch.arange(0, dataset.validation.mapped_triples.shape[0]),
                             dataset.validation.mapped_triples[:, 0]]
@@ -92,8 +94,6 @@ def per_rel_eval(mapped_triples, pred_scores, out_dir):
         rg_tris = original_groups.get_group(rel)
         rg_index = torch.as_tensor(rg_tris.index)
         h_preds, t_preds = pred_scores[rg_index].chunk(2, 1)
-        h_preds = h_preds.squeeze(1)
-        t_preds = t_preds.squeeze(1)
         heads = torch.as_tensor(rg_tris['h'].values)
         tails = torch.as_tensor(rg_tris['t'].values)
         head_hits = calc_hit_at_k(h_preds, heads)
@@ -158,8 +158,6 @@ def per_mapping_eval(dataset, pred_scores, out_dir):
         if len(rg_tris.index) > 0:
             rg_index = torch.as_tensor(rg_tris.index)
             h_preds, t_preds = pred_scores[rg_index].chunk(2, 1)
-            h_preds = h_preds.squeeze(1)
-            t_preds = t_preds.squeeze(1)
             heads = torch.as_tensor(rg_tris['h'].values)
             tails = torch.as_tensor(rg_tris['t'].values)
             head_hits = calc_hit_at_k(h_preds, heads)
