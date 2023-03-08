@@ -73,7 +73,7 @@ class SimpleAverageBlender(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER_RotatE_CPComplEx_anyburl")
+    parser.add_argument('--models', type=str, default="anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()

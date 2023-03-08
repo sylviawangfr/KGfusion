@@ -37,7 +37,7 @@ def read_hrt_pred_anyburl(anyburl_dir, snapshot=100, top_k=10):
     t_scores = t_preds[:, 1].reshape([preserve_shape[0], top_k])
     pred_index = torch.stack([h_index, t_index], 1)
     pred_scores = torch.stack([h_scores, t_scores], 1)
-    return file_triples, pred_index, pred_scores
+    return torch.as_tensor(file_triples, dtype=torch.int64), pred_index, pred_scores
 
 
 def eval_groups(mapped_triples, scores_in_pykeen_format):
@@ -51,11 +51,12 @@ def eval_groups(mapped_triples, scores_in_pykeen_format):
     return torch.as_tensor([head_hits, tail_hits, both_hit])
 
 
-def anyburl_to_pykeen_format(mapped_triples, file_triples, num_candidates, pred_index, pred_scores):
+def anyburl_to_pykeen_format(mapped_triples, num_candidates, anyburl_dir, snapshot=100, top_k=10):
+    file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(anyburl_dir, snapshot, top_k)
     pred_index[pred_index == -1] = num_candidates  # add one extra column to handle mask value/index
     pykeen_scatter_scores = torch.zeros([pred_scores.shape[0], 2, num_candidates + 1]).scatter_(2, pred_index, pred_scores) # sigmoid scores [0-1]
     # get index of triples
-    file_index = get_certain_index_in_tensor(mapped_triples, file_triples)
+    file_index = get_index_of_a_in_b(file_triples, mapped_triples)
     converted = torch.zeros([mapped_triples.shape[0], 2, num_candidates])
     converted[file_index] = pykeen_scatter_scores[:, :, :-1]
     return converted
@@ -78,19 +79,8 @@ def to_fusion_eval_format(dataset: pykeen.datasets.Dataset, eval_preds_in_pykeen
     torch.save(neg_index_topk, out_dir + "eval_neg_index.pt")
 
 
-def to_fusion_test_format(dataset, file_triples: [], pred_index, pred_scores, out_dir):
-    # anyburl doesn't predict in order of input triples, we need sort result to compat with pykeen
-    mapped_triples = dataset.testing.mapped_triples
-    num_candidates = dataset.num_entities
-    # get index of triples
-    file_index = get_certain_index_in_tensor(mapped_triples, file_triples)
-    pred_index[pred_index == -1] = num_candidates  # add one extra column to handle mask value/index
-    pykeen_scatter_scores = torch.zeros([pred_scores.shape[0], 2, num_candidates + 1]).scatter_(2, pred_index, pred_scores) # sigmoid scores [0-1]
-    scores = torch.zeros([mapped_triples.shape[0], 2, num_candidates])
-    scores[file_index] = pykeen_scatter_scores[:, :, :-1]
-    scores = torch.chunk(scores, 2, 1)
-    scores = torch.cat([i.squeeze(1) for i in scores], 1)
-    torch.save(scores, out_dir + "preds.pt")
+def to_fusion_test_format(preds_in_pykeen, out_dir):
+    torch.save(preds_in_pykeen, out_dir + "preds.pt")
 
 
 def per_rel_eval(mapped_triples, pred_scores, out_dir):
@@ -184,13 +174,17 @@ def per_mapping_eval(dataset, pred_scores, out_dir):
     torch.save(head_tail_mrr, out_dir + "rank_mapping_rel_eval.pt")
 
 
-def get_certain_index_in_tensor(src_tensor, target):
-    df_src = pd.DataFrame(data=src_tensor.numpy())
-    df_tgt = pd.DataFrame(data=target)
-    diff1 = pd.concat([df_src, df_tgt]).drop_duplicates(keep=False)
-    diff2 = pd.concat([df_src, diff1]).drop_duplicates(keep=False)
-    tgt_idx = diff2.index
-    return torch.as_tensor(tgt_idx)
+def get_index_of_a_in_b(a, b):
+    b_df = pd.DataFrame(data=b.numpy(), columns=['h', 'r', 't'])
+    a_in_b_index = []
+    for row in a.numpy():
+        h = row[0]
+        r = row[1]
+        t = row[2]
+        re = b_df.query("h==@h & r==@r & t==@t")
+        a_in_b_index.append(re.index.values[0])
+    return a_in_b_index
+
 
 
 def mapped_triples_2_anyburl_hrt_dev(dataset: pykeen.datasets.Dataset, anyburl_dir):
@@ -283,9 +277,11 @@ class LpAnyBURL:
         prepare_anyburl_configs(self.work_dir, snapshot=snapshot, top_k=top_k)
         learn_anyburl(self.work_dir, snapshot=snapshot)
         predict_with_anyburl(self.work_dir, snapshot=snapshot)
-        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, snapshot=snapshot, top_k=top_k)
-        pykeen_formated = anyburl_to_pykeen_format(self.dataset.validation.mapped_triples, file_triples,
-                                                   self.dataset.num_entities, pred_index, pred_scores)
+        pykeen_formated = anyburl_to_pykeen_format(self.dataset.validation.mapped_triples,
+                                                   self.dataset.num_entities,
+                                                   anyburl_dir=self.work_dir,
+                                                   snapshot=snapshot,
+                                                   top_k=top_k)
         all_pos_triples = get_all_pos_triples(self.dataset)
         to_fusion_eval_format(self.dataset, pykeen_formated.clone(), all_pos_triples, self.work_dir, top_k)
         per_rel_eval(self.dataset.validation.mapped_triples, pykeen_formated, self.work_dir)
@@ -296,15 +292,19 @@ class LpAnyBURL:
         clean_anyburl_tmp_files(self.work_dir)
         mapped_test_2_anyburl_hrt_test(self.dataset, self.work_dir)
         predict_with_anyburl(self.work_dir, snapshot=snapshot)
-        file_triples, pred_index, pred_scores = read_hrt_pred_anyburl(self.work_dir, snapshot=snapshot, top_k=top_k)
-        to_fusion_test_format(self.dataset, file_triples, pred_index, pred_scores, self.work_dir)
+        pykeen_formated = anyburl_to_pykeen_format(self.dataset.testing.mapped_triples,
+                                                   num_candidates=self.dataset.num_entities,
+                                                   anyburl_dir=self.work_dir,
+                                                   snapshot=snapshot,
+                                                   top_k=top_k)
+        to_fusion_test_format(pykeen_formated, self.work_dir)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--snapshot', type=int, default=1000)
-    parser.add_argument('--top_k', type=int, default=100)
+    parser.add_argument('--snapshot', type=int, default=100)
+    parser.add_argument('--top_k', type=int, default=10)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/anyburl/")
     args = parser.parse_args()
     param1 = args.__dict__
