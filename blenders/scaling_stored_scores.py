@@ -60,7 +60,7 @@ class PlattScalingIndividual():
             old_shape = self.context[model_name]['preds'].shape
             # individual_cali = logistic.transform(pred_features[index].numpy(), mean_estimate=True)
             logger.info(f"Start transforming {self.model_list[index]}.")
-            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=100 * old_shape[1])
+            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=256 * old_shape[1])
             individual_cali = []
             for batch in tqdm(m_test_dataloader):
                 batch_individual_cali = logistic.transform(batch.numpy(), num_samples=100).mean(0)
