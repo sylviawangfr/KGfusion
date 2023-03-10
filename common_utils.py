@@ -20,18 +20,21 @@ def chart_input(pos_feature, neg_feature, out_file):
 
 def format_result(result):
     re = result.to_dict()
-    re_str = "head hit@n: {}, {}, {}". \
+    re_str = "head hit@n/mrr: {}, {}, {}, {}". \
         format(re['head']['realistic']['hits_at_1'],
                re['head']['realistic']['hits_at_3'],
-               re['head']['realistic']['hits_at_10'])
-    re_str = re_str + ';\n' + "tail hit@n: {}, {}, {}". \
+               re['head']['realistic']['hits_at_10'],
+               re['head']['realistic']['inverse_harmonic_mean_rank'])
+    re_str = re_str + ';\n' + "tail hit@n/mrr: {}, {}, {}, {}". \
         format(re['tail']['realistic']['hits_at_1'],
                re['tail']['realistic']['hits_at_3'],
-               re['tail']['realistic']['hits_at_10'])
-    re_str = re_str + ';\n' + "both hit@n: {}, {}, {}". \
+               re['tail']['realistic']['hits_at_10'],
+               re['head']['realistic']['inverse_harmonic_mean_rank'])
+    re_str = re_str + ';\n' + "both hit@n/mrr: {}, {}, {}, {}". \
         format(re['both']['realistic']['hits_at_1'],
                re['both']['realistic']['hits_at_3'],
-               re['both']['realistic']['hits_at_10'])
+               re['both']['realistic']['hits_at_10'],
+               re['head']['realistic']['inverse_harmonic_mean_rank'])
     return re_str
 
 

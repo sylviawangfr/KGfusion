@@ -173,14 +173,15 @@ def per_mapping_eval(dataset, pred_scores, out_dir):
 
 
 def get_index_of_a_in_b(a, b):
-    b_df = pd.DataFrame(data=b.numpy(), columns=['h', 'r', 't'])
-    a_in_b_index = []
-    for row in a.numpy():
-        h = row[0]
-        r = row[1]
-        t = row[2]
-        re = b_df.query("h==@h & r==@r & t==@t")
-        a_in_b_index.append(re.index.values[0])
+    # b_df = pd.DataFrame(data=b.numpy(), columns=['h', 'r', 't'])
+    # a_in_b_index = []
+    # for row in a.numpy():
+    #     h = row[0]
+    #     r = row[1]
+    #     t = row[2]
+    #     re = b_df.query("h==@h & r==@r & t==@t")
+    #     a_in_b_index.append(re.index.values[0])
+
     return a_in_b_index
 
 
