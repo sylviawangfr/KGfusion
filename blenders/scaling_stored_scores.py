@@ -2,6 +2,7 @@ import argparse
 import gc
 import logging
 import torch
+from netcal.binning import IsotonicRegression
 from netcal.scaling import LogisticCalibration
 from pykeen.datasets import get_dataset
 from torch.utils.data import DataLoader
@@ -24,6 +25,7 @@ class PlattScalingIndividual():
         )
         self.model_list = params['models']
         self.num_neg = params['num_neg']
+        self.params = params
         self.context = load_score_context(params['models'],
                                           in_dir=params['work_dir']
                                           )
@@ -40,6 +42,9 @@ class PlattScalingIndividual():
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
         pos, neg = dev_feature_dataset.get_all_dev_examples()
+        keep_index = (pos > 0).nonzero(as_tuple=True)[0]
+        neg = neg.reshape(pos.shape[0], self.num_neg)[keep_index].flatten().unsqueeze(1)
+        pos = pos[keep_index]
         inputs = torch.cat([pos, neg], 0)
         labels = torch.cat([torch.ones(pos.shape[0], 1),
                             torch.zeros(neg.shape[0], 1)], 0).numpy()
@@ -49,21 +54,29 @@ class PlattScalingIndividual():
         logger.debug(f"use cuda: {use_cuda}")
         pred_features = test_feature_dataset.get_all_test_examples()
         pred_features = torch.chunk(pred_features, model_num, 1)
+
         for index, m in enumerate(model_features):
             model_name = self.model_list[index]
-            logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
-                                           use_cuda=use_cuda, vi_epochs=500)
+            if self.params['cali'] == "scaling":
+                cali = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
+                                   use_cuda=use_cuda, vi_epochs=500)
+            else:
+                cali = IsotonicRegression(detection=True, independent_probabilities=True)
+
             gc.collect()
             if use_cuda:
                 torch.cuda.empty_cache()
-            logistic.fit(m.numpy(), labels)
+            cali.fit(m.numpy(), labels)
             old_shape = self.context[model_name]['preds'].shape
             # individual_cali = logistic.transform(pred_features[index].numpy(), mean_estimate=True)
             logger.info(f"Start transforming {self.model_list[index]}.")
             m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=256 * old_shape[1])
             individual_cali = []
             for batch in tqdm(m_test_dataloader):
-                batch_individual_cali = logistic.transform(batch.numpy(), num_samples=100).mean(0)
+                if self.params['cali'] == "scaling":
+                    batch_individual_cali = cali.transform(batch.numpy(), num_samples=100).mean(0)
+                else:
+                    batch_individual_cali = cali.transform(batch.numpy())
                 individual_cali.extend(batch_individual_cali)
                 gc.collect()
                 if use_cuda:
@@ -75,7 +88,7 @@ class PlattScalingIndividual():
             individual_cali = torch.cat([h_preds, t_preds], 1)
             torch.save(individual_cali, self.work_dir + f"{model_name}/cali_preds.pt")
             logger.info(f"Transforming saved for {self.model_list[index]}.")
-            del logistic
+            del cali
             del h_preds
             del t_preds
             del individual_cali
@@ -90,6 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
+    parser.add_argument('--cali', type=str, default="scaling")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
