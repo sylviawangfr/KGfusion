@@ -32,7 +32,7 @@ class CalibrationBlender1(Blender):
                                                 num_neg=self.params['num_neg'])
         test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
         if self.params['cali'] == "scaling":
-            cali = LogisticCalibration(method='momentum', detection=True, independent_probabilities=True)
+            cali = LogisticCalibration(method='momentum', detection=True, independent_probabilities=True, vi_epochs=500)
         else:
             cali = IsotonicRegression(detection=True, independent_probabilities=True)
         # detection : bool, default: False
@@ -71,7 +71,7 @@ class CalibrationBlender1(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="anyburl")
+    parser.add_argument('--models', type=str, default="RotatE_CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument("--cali", type=str, default="scaling")
