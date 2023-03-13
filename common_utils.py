@@ -25,12 +25,12 @@ def format_result(result):
                re['head']['realistic']['hits_at_3'],
                re['head']['realistic']['hits_at_10'],
                re['head']['realistic']['inverse_harmonic_mean_rank'])
-    re_str = re_str + ';\n' + "tail hit@n/mrr: {:.3f}/{:.3f}/{:.3f}/{:.3f}". \
+    re_str = re_str + '\n' + "tail hit@n/mrr: {:.3f}/{:.3f}/{:.3f}/{:.3f}". \
         format(re['tail']['realistic']['hits_at_1'],
                re['tail']['realistic']['hits_at_3'],
                re['tail']['realistic']['hits_at_10'],
                re['tail']['realistic']['inverse_harmonic_mean_rank'])
-    re_str = re_str + ';\n' + "both hit@n/mrr: {:.3f}/{:.3f}/{:.3f}/{:.3f}". \
+    re_str = re_str + '\n' + "both hit@n/mrr: {:.3f}/{:.3f}/{:.3f}/{:.3f}". \
         format(re['both']['realistic']['hits_at_1'],
                re['both']['realistic']['hits_at_3'],
                re['both']['realistic']['hits_at_10'],
