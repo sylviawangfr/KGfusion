@@ -103,7 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--cali', type=str, default="scaling")
+    parser.add_argument('--cali', type=str, default="isotonic")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})

@@ -29,12 +29,12 @@ def format_result(result):
         format(re['tail']['realistic']['hits_at_1'],
                re['tail']['realistic']['hits_at_3'],
                re['tail']['realistic']['hits_at_10'],
-               re['head']['realistic']['inverse_harmonic_mean_rank'])
+               re['tail']['realistic']['inverse_harmonic_mean_rank'])
     re_str = re_str + ';\n' + "both hit@n/mrr: {}, {}, {}, {}". \
         format(re['both']['realistic']['hits_at_1'],
                re['both']['realistic']['hits_at_3'],
                re['both']['realistic']['hits_at_10'],
-               re['head']['realistic']['inverse_harmonic_mean_rank'])
+               re['both']['realistic']['inverse_harmonic_mean_rank'])
     return re_str
 
 
