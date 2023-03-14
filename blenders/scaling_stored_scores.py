@@ -42,9 +42,11 @@ class PlattScalingIndividual():
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
         pos, neg = dev_feature_dataset.get_all_dev_examples()
-        keep_index = (pos > 0).nonzero(as_tuple=True)[0]
-        neg = neg.reshape(pos.shape[0], self.num_neg)[keep_index].flatten().unsqueeze(1)
-        pos = pos[keep_index]
+        keep_index1 = (pos > 0).nonzero(as_tuple=True)[0]
+        neg = neg.reshape(pos.shape[0], self.num_neg)[keep_index1].flatten().unsqueeze(1)
+        pos = pos[keep_index1]
+        keep_index2 = (neg > 0).nonzero(as_tuple=True)[0]
+        neg = neg[keep_index2]
         inputs = torch.cat([pos, neg], 0)
         labels = torch.cat([torch.ones(pos.shape[0], 1),
                             torch.zeros(neg.shape[0], 1)], 0).numpy()

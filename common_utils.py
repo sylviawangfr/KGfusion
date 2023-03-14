@@ -86,3 +86,4 @@ def load_json(in_file):
         dict_data = json.load(f)
         f.close()
     return dict_data
+
