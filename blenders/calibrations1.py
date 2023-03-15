@@ -10,6 +10,7 @@ from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 from blender_utils import restore_eval_format, Blender
 from common_utils import format_result, save_to_file
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,14 @@ class CalibrationBlender1(Blender):
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
         pos, neg = dev_feature_dataset.get_all_dev_examples()
+        remove_index1 = (pos == 0).nonzero(as_tuple=True)[0]
+        keep_index1 = np.delete(np.arange(pos.shape[0]), remove_index1.numpy(), 0)
+        neg = neg.reshape(pos.shape[0], int(neg.shape[0]/pos.shape[0]), neg.shape[-1])[keep_index1]
+        neg = neg.reshape(neg.shape[0] * neg.shape[1], neg.shape[-1])
+        pos = pos[keep_index1]
+        remove_index2 = (neg == 0).nonzero(as_tuple=True)[0]
+        keep_index2 = np.delete(np.arange(neg.shape[0]), remove_index2.numpy(), 0)
+        neg = neg[keep_index2]
         inputs = torch.cat([pos, neg], 0).numpy()
         labels = torch.cat([torch.ones(pos.shape[0], 1),
                             torch.zeros(neg.shape[0], 1)], 0).numpy()
@@ -67,11 +76,9 @@ class CalibrationBlender1(Blender):
         return result
 
 
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="RotatE_CPComplEx")
+    parser.add_argument('--models', type=str, default="anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument("--cali", type=str, default="scaling")
