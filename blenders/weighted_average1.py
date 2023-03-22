@@ -30,18 +30,18 @@ def weighted_harmonic_mean(t1, weights):
 class WeightedAverageBlender1(Blender):
     def __init__(self, params):
         super().__init__(params)
-        self.context = load_score_context(self.params['models'],
-                                          in_dir=params['work_dir'],
-                                          evaluator_key=params['evaluator_key'],
-                                          eval_feature=params['eval_feature'],
+        self.context = load_score_context(self.params.models,
+                                          in_dir=params.work_dir,
+                                          evaluator_key=params.evaluator_key,
+                                          eval_feature=params.eval_feature,
                                           calibration=True
                                           )
 
     def aggregate_scores(self):
-        work_dir = self.params['work_dir']
+        work_dir = self.params.work_dir
         mapped_triples = self.dataset.testing.mapped_triples
         all_pos = get_all_pos_triples(self.dataset)
-        get_features = get_features_clz(param1['features'])
+        get_features = get_features_clz(self.params.features)
         test_data_feature = get_features(mapped_triples, self.context, all_pos)
         eval_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 2, 1)
         blender = weighted_mean(score_feature, eval_feature)
@@ -61,9 +61,9 @@ class WeightedAverageBlender1(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
-                     f"{self.params['evaluator_key']}" \
-                     f"evalFeature_{self.params['eval_feature']}" \
+        option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_" \
+                     f"{self.params.evaluator_key}" \
+                     f"evalFeature_{self.params.eval_feature}" \
                      f"_weighted_avg1"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
@@ -72,20 +72,19 @@ class WeightedAverageBlender1(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="RotatE_anyburl")
+    parser.add_argument('--models', type=str, default="CPComplEx_anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")
-    parser.add_argument('--eval_feature', type=str, default='rel_mapping')
+    parser.add_argument('--eval_feature', type=str, default='rel')
     # "1": PerRelDataset,
     # "2": PerRelBothDataset,
     # "3": ScoresOnlyDataset,
     # "4": PerEntDataset,
     # "5": PerRelEntDataset
     # "6": PerModelBothDataset
-    parser.add_argument('--features', type=int, default=2)  # 1, 2, 4, 6
+    parser.add_argument('--features', type=int, default=1)  # 1, 2, 4, 6
     args = parser.parse_args()
-    param1 = args.__dict__
-    param1.update({"models": args.models.split('_')})
-    wab = WeightedAverageBlender1(param1)
+    args.models = args.models.split('_')
+    wab = WeightedAverageBlender1(args)
     wab.aggregate_scores()

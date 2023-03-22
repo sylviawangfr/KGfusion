@@ -15,50 +15,12 @@ class PerRelDataset(FusionDataset):
     def _get_rel_eval_scores(self, model_rel_eval, rel2idx):
         rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
         rel_idx = rel_mapped.applymap(lambda x: rel2idx[x] if x in rel2idx else -1)
-        rel_h_t_eval = model_rel_eval[rel_idx.to_numpy().T]
-        return rel_h_t_eval
+        rel_h_eval = model_rel_eval[rel_idx.to_numpy(), 0, -1] # the model_rel_eval is in shape [group_num, 3, 4], hit@1,3,10, mrr
+        rel_t_eval = model_rel_eval[rel_idx.to_numpy(), 1, -1] # the model_rel_eval is in shape [group_num, 3, 4], hit@1,3,10, mrr
+        return rel_h_eval, rel_t_eval
 
     def generate_training_input_feature(self):
         pass
-        #   [m1_score, m2_score, ... ]
-        # scores_neg = []
-        # scores_pos = []
-        # h_rel_eval = []
-        # t_rel_eval = []
-        # h_ent_eval = []
-        # t_ent_eval = []
-        # neg_index_topk_times = []
-        # rel2idx = self.context_resource['releval2idx']
-        # h_ent2idx = self.context_resource['h_ent2idx']
-        # t_ent2idx = self.context_resource['t_ent2idx']
-        # for m in self.context_resource['models']:
-        #     m_context = self.context_resource[m]
-        #     # get pos scores
-        #     m_pos_scores = m_context['eval_pos_scores']
-        #     scores_pos.append(m_pos_scores)  # [s1,s2,...]
-        #     # tri get neg scores
-        #     m_neg_scores = m_context['eval_neg_scores']
-        #     m_neg_index_topk4 = m_context['eval_neg_index']
-        #     scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
-        #     neg_index_topk_times.append(m_neg_index_topk4)
-        #     # model eval hit@N
-        #     m_hrb_eval = self._get_rel_eval_scores(m_context['rel_eval'], rel2idx)
-        #     m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_hrb_eval, 3, 1)
-        #     h_rel_eval.append(m_h_eval)
-        #     t_rel_eval.append(m_t_eval)
-        #     h_ent_eval.append(self._get_h_eval_scores(m_context['h_ent_eval'], h_ent2idx))
-        #     t_ent_eval.append(self._get_t_eval_scores(m_context['t_ent_eval'], t_ent2idx))
-        # # # pos feature [m1_eval, m2_eva., ... m1_s1,m2_s1,....]
-        # scores_pos = torch.vstack(scores_pos).T
-        # # neg feature
-        # scores_neg = get_multi_model_neg_topk(scores_neg, neg_index_topk_times, self.num_neg)
-        # # eval scores
-        # _eval = torch.hstack(both_eval)
-        # pos_features = torch.concat([both_eval, scores_pos], 1)
-        # num_models = len(self.context_resource['models'])
-        # eval_repeat = torch.reshape(both_eval.repeat(1, self.num_neg), (both_eval.shape[0] * self.num_neg, num_models))
-        # neg_features = torch.cat([eval_repeat, scores_neg], -1)
-        # return pos_features, neg_features
 
     def generate_pred_input_feature(self):
         # s1,m1_h_eval,... m1_t_eval
@@ -74,8 +36,7 @@ class PerRelDataset(FusionDataset):
             m_h_preds, m_t_preds = torch.chunk(m_preds, 2, 1)
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))
             tail_scores.append(torch.flatten(m_t_preds, start_dim=0, end_dim=1))
-            m_rel_h_t_eval = self._get_rel_eval_scores(m_context['rel_eval'], rel2idx)
-            m_h_eval, m_t_eval, m_b_eval = torch.chunk(m_rel_h_t_eval, 3, 1)
+            m_h_eval, m_t_eval = self._get_rel_eval_scores(m_context['rel_eval'], rel2idx)
             h_rel_eval.append(m_h_eval)
             t_rel_eval.append(m_t_eval)
 

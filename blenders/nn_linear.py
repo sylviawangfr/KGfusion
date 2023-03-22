@@ -60,7 +60,7 @@ def train_step_linear_blender_balanced_BCE(model, dataloader:DataLoader, device,
     num_neg = num_pos * dataloader.dataset.num_neg
     alpha_pos = num_neg / (num_pos + num_neg)
     alpha_neg = num_pos * 1.1 / (num_neg + num_pos)
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'], momentum=params['momentum'])
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=params.lr, momentum=params.momentum)
     train_loss = 0
     for batch, (pos_feature, neg_feature) in enumerate(dataloader):
         features = torch.cat([pos_feature, neg_feature], 0)
@@ -88,7 +88,7 @@ def train_step_linear_blender_balanced_BCE(model, dataloader:DataLoader, device,
 def train_step_linear_blender_mean_BCE(model, dataloader:DataLoader, device, params):
     loss_func = nn.BCEWithLogitsLoss(reduction='sum')
     # optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
-    optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'], momentum=params['momentum'])
+    optimizer = torch.optim.SGD(params=model.parameters(), lr=params.lr, momentum=params.momentum)
     train_loss = 0
     for batch, (pos_feature, neg_feature) in enumerate(dataloader):
         # features = torch.cat([pos_feature, neg_feature], 0)
@@ -116,8 +116,8 @@ def train_step_linear_blender_mean_BCE(model, dataloader:DataLoader, device, par
 
 
 def train_step_linear_blender_Margin(model, dataloader:DataLoader, device, params):
-    loss_func = nn.MarginRankingLoss(margin=params['margin'], reduction='sum')
-    optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
+    loss_func = nn.MarginRankingLoss(margin=params.margin, reduction='sum')
+    optimizer = torch.optim.Adam(model.parameters(), lr=params.lr, weight_decay=params.weight_decay)
     # optimizer = torch.optim.SGD(params=model.parameters(), lr=params['lr'], momentum=params['momentum'], weight_decay=params['weight_decay'])
     optimizer.zero_grad()
     train_loss = 0
@@ -228,13 +228,14 @@ class NNLinearBlender(Blender):
         super().__init__(params)
 
     def aggregate_scores(self):
-        if self.params['mlflow']:
+        if self.params.mlflow:
             exp = mlflow.search_experiments(view_type=ViewType.ALL, filter_string="name='KGFusion'")
             if not exp:
                 mlflow.create_experiment("KGFusion")
             mlflow.set_experiment("KGFusion")
-            for k in self.params:
-                log_param(k, self.params[k])
+            log_para = self.params.__dict__
+            for k in log_para:
+                log_param(k, log_para[k])
         # 1. load individual model context
         context = self.context
         # 2. train model
@@ -243,13 +244,13 @@ class NNLinearBlender(Blender):
         # 3. aggregate scores for testing
         result = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_" \
-                     f"{'_'.join(self.params['models'])}_" \
-                     f"feature{self.params['features']}_" \
-                     f"nn_{self.params['loss']}"
-        save_to_file(str_re, self.params['work_dir'] + f"{option_str}.log")
+        option_str = f"{self.params.dataset}_" \
+                     f"{'_'.join(self.params.models)}_" \
+                     f"feature{self.params.features}_" \
+                     f"nn_{self.params.loss}"
+        save_to_file(str_re, self.params.work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
-        if self.params['mlflow']:
+        if self.params.mlflow:
             mlflow.log_param('result', str_re)
 
 
@@ -278,7 +279,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.mlflow == 'True':
         args.mlflow = True
-    para = args.__dict__
-    para.update({"models": args.models.split('_')})
-    nnb = NNLinearBlender(para)
+    args.models = args.models.split('_')
+    nnb = NNLinearBlender(args)
     nnb.aggregate_scores()

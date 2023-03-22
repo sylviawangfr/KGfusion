@@ -19,15 +19,15 @@ logger.setLevel(logging.DEBUG)
 
 class PlattScalingIndividual():
     def __init__(self, params):
-        self.work_dir = params['work_dir']
+        self.work_dir = params.work_dir
         self.dataset = get_dataset(
-            dataset=params['dataset']
+            dataset=params.dataset
         )
-        self.model_list = params['models']
-        self.num_neg = params['num_neg']
+        self.model_list = params.models
+        self.num_neg = params.num_neg
         self.params = params
-        self.context = load_score_context(params['models'],
-                                          in_dir=params['work_dir']
+        self.context = load_score_context(params.models,
+                                          in_dir=params.work_dir
                                           )
 
     def cali(self):
@@ -59,7 +59,7 @@ class PlattScalingIndividual():
 
         for index, m in enumerate(model_features):
             model_name = self.model_list[index]
-            if self.params['cali'] == "scaling":
+            if self.params.cali == "scaling":
                 cali = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
                                    use_cuda=use_cuda, vi_epochs=500)
             else:
@@ -75,7 +75,7 @@ class PlattScalingIndividual():
             m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=256 * old_shape[1])
             individual_cali = []
             for batch in tqdm(m_test_dataloader):
-                if self.params['cali'] == "scaling":
+                if self.params.cali == "scaling":
                     batch_individual_cali = cali.transform(batch.numpy(), num_samples=100).mean(0)
                 else:
                     batch_individual_cali = cali.transform(batch.numpy())
@@ -107,7 +107,6 @@ if __name__ == '__main__':
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="isotonic")
     args = parser.parse_args()
-    param1 = args.__dict__
-    param1.update({"models": args.models.split('_')})
-    wab = PlattScalingIndividual(param1)
+    args.models = args.models.split('_')
+    wab = PlattScalingIndividual(args)
     wab.cali()

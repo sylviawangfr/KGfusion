@@ -8,7 +8,7 @@ import torch
 from features.feature_per_ent_dataset import PerEntDataset
 from features.feature_per_model_both_dataset import PerModelBothDataset
 from features.feature_per_rel_both_dataset import PerRelBothDataset
-from features.feature_per_rel_dataset import PerRelDataset
+from features.feature_per_rel_ht_dataset import PerRelDataset
 from features.feature_per_rel_ent_dataset import PerRelEntDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from abc import ABC, abstractmethod
@@ -18,7 +18,7 @@ from pykeen.datasets import get_dataset
 class Blender(ABC):
     def __init__(self, params):
         self.dataset = get_dataset(
-            dataset=params['dataset']
+            dataset=params.dataset
         )
         self.params = params
 

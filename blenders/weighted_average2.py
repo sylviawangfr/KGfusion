@@ -12,11 +12,10 @@ from lp_kge.lp_pykeen import get_all_pos_triples
 class WeightedAverageBlender2(Blender):
     def __init__(self, params):
         super().__init__(params)
-        self.context = load_score_context(self.params['models'],
-                                          in_dir=params['work_dir'],
-                                          evaluator_key=params['evaluator_key'],
-                                          rel_mapping=False,
-                                          calibration=True
+        self.context = load_score_context(self.params.models,
+                                          in_dir=params.work_dir,
+                                          evaluator_key=params.evaluator_key,
+                                          eval_feature=params.evaluator_feature,
                                           )
 
     def _p1(self, t1, t2):
@@ -30,7 +29,7 @@ class WeightedAverageBlender2(Blender):
         return torch.sub(torch.ones(tmp_shape), tmp3)
 
     def aggregate_scores(self):
-        work_dir = self.params['work_dir']
+        work_dir = self.params.work_dir
         mapped_triples = self.dataset.testing.mapped_triples
         all_pos = get_all_pos_triples(self.dataset)
         test_data_feature = PerRelEntDataset(mapped_triples, self.context, all_pos)
@@ -56,8 +55,8 @@ class WeightedAverageBlender2(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_" \
-                     f"{self.params['evaluator_key']}_weighted_avg2"
+        option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_" \
+                     f"{self.params.evaluator_key}_weighted_avg2"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -70,7 +69,6 @@ if __name__ == '__main__':
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")
     args = parser.parse_args()
-    param1 = args.__dict__
-    param1.update({"models": args.models.split('_')})
-    wab = WeightedAverageBlender2(param1)
+    args.models = args.models.split('_')
+    wab = WeightedAverageBlender2(args)
     wab.aggregate_scores()

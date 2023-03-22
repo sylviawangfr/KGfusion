@@ -15,7 +15,7 @@ class PerRelBothDataset(FusionDataset):
     def _get_rel_eval_scores(self, model_rel_eval, rel2idx):
         rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
         rel_idx = rel_mapped.applymap(lambda x: rel2idx[x] if x in rel2idx else -1)
-        rel_b_eval = model_rel_eval[rel_idx.to_numpy(), 2, 0] # the model_rel_eval is in shape [group_num, 3, 4]
+        rel_b_eval = model_rel_eval[rel_idx.to_numpy(), 2, -1] # the model_rel_eval is in shape [group_num, 3, 4], hit@1,3,10, mrr
         return rel_b_eval
 
     def generate_training_input_feature(self):
@@ -35,7 +35,7 @@ class PerRelBothDataset(FusionDataset):
             scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
             neg_index_topk_times.append(m_neg_index_topk4)
             # model eval
-            m_b_eval = self._get_rel_eval_scores(m_context['rel_eval'], self.context_resource['rel2idx'])
+            m_b_eval = self._get_rel_eval_scores(m_context['rel_eval'], self.context_resource['releval2idx'])
             both_eval.append(m_b_eval)
         # # pos feature [m1_eval, m2_eva., ... m1_s1,m2_s1,....]
         scores_pos = torch.vstack(scores_pos).T
@@ -50,7 +50,7 @@ class PerRelBothDataset(FusionDataset):
         return pos_features, neg_features
 
     def generate_pred_input_feature(self):
-        # s1,m1_h_eval,... m1_t_eval
+        # m1_eval, m1_score
         head_scores = []
         tail_scores = []
         both_eval = []

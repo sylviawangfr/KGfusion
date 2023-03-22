@@ -14,7 +14,7 @@ from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples, find_relation_mappings
 from blender_utils import restore_eval_format, Blender
-
+import numpy as np
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -24,11 +24,11 @@ logger.setLevel(logging.DEBUG)
 class PerGroupCaliBlender(Blender):
     def __init__(self, params):
         super().__init__(params)
-        self.rel_mapping = self.params['rel_mapping']=='True'
-        self.context = load_score_context(self.params['models'],
-                                          in_dir=params['work_dir'],
-                                          rel_mapping=params['rel_mapping']=='True',
-                                          calibration=False
+        self.context = load_score_context(params.models,
+                                          in_dir=params.work_dir,
+                                          calibration=False,
+                                          evaluator_key='rank',
+                                          eval_feature=params.eval_feature,
                                           )
 
     def _groupby_rel(self):
@@ -51,26 +51,35 @@ class PerGroupCaliBlender(Blender):
     def aggregate_scores(self):
         # calibrate each group of triples separately
         all_pos_triples = get_all_pos_triples(self.dataset)
-        work_dir = self.params['work_dir']
         models_context = self.context
-        if self.rel_mapping:
+        if self.params.eval_feature == 'rel_mapping':
             eval_rel2index, test_rel2index = self._groupby_mapping()
         else:
             eval_rel2index, test_rel2index = self._groupby_rel()
         dev_feature_dataset = ScoresOnlyDataset(self.dataset.validation.mapped_triples,
                                                 models_context,
                                                 all_pos_triples,
-                                                num_neg=self.params['num_neg'])
+                                                num_neg=self.params.num_neg)
         test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
         calibrated_scores = []
         reorded_index = []
         use_cuda = torch.cuda.is_available()
         logger.debug(f"use cuda: {use_cuda}")
-        model_num = len(self.context['models'])
+        model_num = len(self.params.models)
         for key, tri_index in tqdm(eval_rel2index.items()):
             if key not in test_rel2index or len(tri_index) == 0 or len(test_rel2index[key])==0:
                 continue
             pos, neg = dev_feature_dataset.collate_train(tri_index)
+
+            remove_index1 = (pos == 0).nonzero(as_tuple=True)[0]
+            keep_index1 = np.delete(np.arange(pos.shape[0]), remove_index1.numpy(), 0)
+            neg = neg.reshape(pos.shape[0], int(neg.shape[0]/pos.shape[0]), neg.shape[-1])[keep_index1]
+            neg = neg.reshape(neg.shape[0] * neg.shape[1], neg.shape[-1])
+            pos = pos[keep_index1]
+            remove_index2 = (neg == 0).nonzero(as_tuple=True)[0]
+            keep_index2 = np.delete(np.arange(neg.shape[0]), remove_index2.numpy(), 0)
+            neg = neg[keep_index2]
+
             combined_feature = torch.cat([pos, neg], 0)
             labels = torch.cat([torch.ones(pos.shape[0], 1),
                                 torch.zeros(neg.shape[0], 1)], 0).numpy()
@@ -79,9 +88,10 @@ class PerGroupCaliBlender(Blender):
             pred_features = torch.chunk(pred_features, model_num, 1)
             reorded_index.extend(test_rel2index[key])
             rel_logits = []
+            # calibrate individual model scores per group
             for index, m in enumerate(model_features):
                 logistic = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
-                                               use_cuda=use_cuda, vi_epochs=500)
+                                               use_cuda=use_cuda, vi_epochs=100)
                 logistic.fit(model_features[index].numpy(), labels)
                 rel_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=1000)
                 rel_m_cali = []
@@ -115,8 +125,8 @@ class PerGroupCaliBlender(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_mapping{self.rel_mapping}_group_cali"
-        save_to_file(str_re, work_dir + f"{option_str}.log")
+        option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_{self.params.eval_feature}_perGroup"
+        save_to_file(str_re, self.params.work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
 
@@ -127,11 +137,10 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--rel_mapping', type=str, default='False')
+    parser.add_argument('--eval_feature', type=str, default='rel')
     args = parser.parse_args()
-    param1 = args.__dict__
-    param1.update({"models": args.models.split('_')})
-    wab = PerGroupCaliBlender(param1)
+    args.models = args.models.split('_')
+    wab = PerGroupCaliBlender(args)
     wab.aggregate_scores()
 
 

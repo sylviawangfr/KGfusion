@@ -56,6 +56,7 @@ class ScoresOnlyDataset(FusionDataset):
         head_scores = torch.vstack(head_scores).T
         tail_scores = torch.vstack(tail_scores).T
         h_t_features = torch.concat([head_scores, tail_scores], 0)
+        h_t_features = h_t_features.type(torch.float32)
         return h_t_features
 
 

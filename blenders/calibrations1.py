@@ -18,22 +18,26 @@ logger = logging.getLogger(__name__)
 class CalibrationBlender1(Blender):
     def __init__(self, params):
         super().__init__(params)
-        self.context = load_score_context(self.params['models'],
-                                          in_dir=params['work_dir'],
+        self.context = load_score_context(self.params.models,
+                                          in_dir=params.work_dir,
                                           calibration=False
                                           )
 
     def aggregate_scores(self):
         all_pos_triples = get_all_pos_triples(self.dataset)
-        work_dir = self.params['work_dir']
+        work_dir = self.params.work_dir
         models_context = self.context
         dev_feature_dataset = ScoresOnlyDataset(self.dataset.validation.mapped_triples,
                                                 models_context,
                                                 all_pos_triples,
-                                                num_neg=self.params['num_neg'])
+                                                num_neg=self.params.num_neg)
         test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
-        if self.params['cali'] == "scaling":
-            cali = LogisticCalibration(method='momentum', detection=True, independent_probabilities=True, vi_epochs=500)
+        if self.params.cali == "scaling":
+            cali = LogisticCalibration(method='momentum',
+                                       detection=True,
+                                       independent_probabilities=True,
+                                       momentum_epochs=500,
+                                       vi_epochs=500)
         else:
             cali = IsotonicRegression(detection=True, independent_probabilities=True)
         # detection : bool, default: False
@@ -70,7 +74,7 @@ class CalibrationBlender1(Blender):
             )
         result = evaluator.finalize()
         str_re = format_result(result)
-        option_str = f"{self.params['dataset']}_{'_'.join(self.params['models'])}_Cali1{self.params['cali']}"
+        option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_Cali1{self.params.cali}"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
@@ -84,7 +88,6 @@ if __name__ == '__main__':
     parser.add_argument("--cali", type=str, default="scaling")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
-    param1 = args.__dict__
-    param1.update({"models": args.models.split('_')})
-    wab = CalibrationBlender1(param1)
+    args.models = args.models.split('_')
+    wab = CalibrationBlender1(args)
     wab.aggregate_scores()
