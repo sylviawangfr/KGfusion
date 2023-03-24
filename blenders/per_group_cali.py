@@ -70,9 +70,10 @@ class PerGroupCaliBlender(Blender):
             if key not in test_rel2index or len(tri_index) == 0 or len(test_rel2index[key])==0:
                 continue
             pos, neg = dev_feature_dataset.collate_train(tri_index)
-
             remove_index1 = (pos == 0).nonzero(as_tuple=True)[0]
             keep_index1 = np.delete(np.arange(pos.shape[0]), remove_index1.numpy(), 0)
+            if len(keep_index1) == 0:
+                continue
             neg = neg.reshape(pos.shape[0], int(neg.shape[0]/pos.shape[0]), neg.shape[-1])[keep_index1]
             neg = neg.reshape(neg.shape[0] * neg.shape[1], neg.shape[-1])
             pos = pos[keep_index1]
