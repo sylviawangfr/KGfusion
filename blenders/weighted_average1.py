@@ -64,6 +64,7 @@ class WeightedAverageBlender1(Blender):
         option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_" \
                      f"{self.params.evaluator_key}" \
                      f"evalFeature_{self.params.eval_feature}" \
+                     f"data{self.params.features}" \
                      f"_weighted_avg1"
         save_to_file(str_re, work_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
