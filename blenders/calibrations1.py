@@ -20,7 +20,7 @@ class CalibrationBlender1(Blender):
         super().__init__(params)
         self.context = load_score_context(self.params.models,
                                           in_dir=params.work_dir,
-                                          calibration=False
+                                          calibration=True
                                           )
 
     def aggregate_scores(self):
@@ -82,9 +82,9 @@ class CalibrationBlender1(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="anyburl")
+    parser.add_argument('--models', type=str, default="RotatE_CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=10)
+    parser.add_argument("--num_neg", type=int, default=4)
     parser.add_argument("--cali", type=str, default="scaling")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
