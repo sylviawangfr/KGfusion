@@ -4,7 +4,7 @@ from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from pykeen.utils import resolve_device
 
-from blenders.blender_utils import restore_eval_format, Blender
+from blenders.blender_utils import eval_with_blender_scores, Blender
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
@@ -32,7 +32,7 @@ class SimpleAverageBlender(Blender):
         evaluator = RankBasedEvaluator()
         relation_filter = None
         for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = restore_eval_format(
+            relation_filter = eval_with_blender_scores(
                 batch=self.dataset.testing.mapped_triples,
                 scores=ht_scores[ind],
                 target=target,
@@ -48,32 +48,10 @@ class SimpleAverageBlender(Blender):
         print(f"{option_str}:\n{str_re}")
         return result
 
-    def test_pred(self):
-        all_pos = get_all_pos_triples(self.dataset)
-        test_data_feature = ScoresOnlyDataset(self.dataset.testing.mapped_triples, self.context, all_pos)
-        score_feature = test_data_feature.get_all_test_examples()
-        score_feature = torch.chunk(score_feature, len(self.context['models']), 1)
-        for idx, m in enumerate(self.params.models):
-            ht_scores = torch.chunk(score_feature[idx], 2, 0)
-            evaluator = RankBasedEvaluator()
-            relation_filter = None
-            for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-                relation_filter = restore_eval_format(
-                    batch=self.dataset.testing.mapped_triples,
-                    scores=ht_scores[ind],
-                    target=target,
-                    evaluator=evaluator,
-                    all_pos_triples=all_pos,
-                    relation_filter=relation_filter,
-                )
-            result = evaluator.finalize()
-            str_re = format_result(result)
-            print(f"{m}:\n {str_re}")
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="anyburl_CPComplEx")
+    parser.add_argument('--models', type=str, default="CP")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="False")

@@ -2,7 +2,7 @@ import argparse
 import torch
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
-from blenders.blender_utils import restore_eval_format, get_features_clz, Blender
+from blenders.blender_utils import eval_with_blender_scores, get_features_clz, Blender
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from lp_kge.lp_pykeen import get_all_pos_triples
@@ -51,7 +51,7 @@ class WeightedAverageBlender1(Blender):
         evaluator = RankBasedEvaluator()
         relation_filter = None
         for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = restore_eval_format(
+            relation_filter = eval_with_blender_scores(
                 batch=self.dataset.testing.mapped_triples,
                 scores=ht_scores[ind],
                 target=target,
@@ -73,7 +73,7 @@ class WeightedAverageBlender1(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CPComplEx_anyburl")
+    parser.add_argument('--models', type=str, default="CPComplEx_CP")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--evaluator_key', type=str, default="rank")

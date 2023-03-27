@@ -12,7 +12,7 @@ from tqdm import tqdm
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
-from blender_utils import restore_eval_format, Blender
+from blender_utils import eval_with_blender_scores, Blender
 from common_utils import format_result, save_to_file
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class CalibrationBlender2(Blender):
         evaluator = RankBasedEvaluator()
         relation_filter = None
         for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = restore_eval_format(
+            relation_filter = eval_with_blender_scores(
                 batch=test_feature_dataset.mapped_triples,
                 scores=ht_scores[ind],
                 target=target,

@@ -192,7 +192,7 @@ if __name__ == '__main__':
     )
     models = ['CP', 'ComplEx']
     parser.add_argument(
-        '--model', choices=models, default="ComplEx",
+        '--model', choices=models, default="CP",
         help="Model in {}".format(models)
     )
     regularizers = ['N3', 'F2']
@@ -242,7 +242,7 @@ if __name__ == '__main__':
         help="decay rate for second moment estimate in Adam"
     )
     parser.add_argument(
-        '--out_dir', type=str, default="../../outputs/UMLS/CPComplEx/"
+        '--out_dir', type=str, default="../../outputs/UMLS/CP/"
     )
     m_args = parser.parse_args()
     train_and_pred(m_args)

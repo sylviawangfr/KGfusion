@@ -28,7 +28,24 @@ class Blender(ABC):
         pass
 
 
-def restore_eval_format(
+def eval_with_blender_scores(
+        batch: MappedTriples,
+        scores: FloatTensor,
+        target: Target,
+        evaluator: Evaluator,
+        all_pos_triples: Optional[MappedTriples],
+        relation_filter: Optional[torch.BoolTensor],
+) -> torch.BoolTensor:
+    candidate_number = int(scores.shape[0] / batch.shape[0])
+    reformatted_scores = scores.reshape([batch.shape[0], candidate_number])
+    return eval_with_formatted_scores(batch,
+                                      reformatted_scores,
+                                      target, evaluator,
+                                      all_pos_triples,
+                                      relation_filter)
+
+
+def eval_with_formatted_scores(
         batch: MappedTriples,
         scores: FloatTensor,
         target: Target,
@@ -72,8 +89,6 @@ def restore_eval_format(
         )
     else:
         positive_filter = relation_filter = None
-    candidate_number = int(scores.shape[0] / batch.shape[0])
-    scores = scores.reshape([batch.shape[0], candidate_number])
     if evaluator.filtered:
         assert positive_filter is not None
         # Select scores of true
@@ -102,7 +117,6 @@ def restore_eval_format(
         scores=scores,
         dense_positive_mask=positive_mask,
     )
-
     return relation_filter
 
 

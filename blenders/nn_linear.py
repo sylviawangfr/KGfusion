@@ -5,7 +5,7 @@ import gc
 import torch.nn.functional as F
 from mlflow.entities import ViewType
 from pykeen.evaluation import RankBasedEvaluator
-from blenders.blender_utils import restore_eval_format, get_features_clz, Blender
+from blenders.blender_utils import eval_with_blender_scores, get_features_clz, Blender
 from pykeen.typing import MappedTriples, LABEL_HEAD, LABEL_TAIL
 from pykeen.utils import resolve_device
 import torch
@@ -211,7 +211,7 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     evaluator = RankBasedEvaluator()
     relation_filter = None
     for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-        relation_filter = restore_eval_format(
+        relation_filter = eval_with_blender_scores(
             batch=mapped_triples,
             scores=ht_scores[ind],
             target=target,

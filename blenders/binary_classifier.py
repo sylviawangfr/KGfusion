@@ -11,7 +11,7 @@ from context_load_and_run import load_score_context
 from features.feature_per_rel_both_dataset import PerRelBothDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
-from blender_utils import restore_eval_format, Blender, get_features_clz
+from blender_utils import eval_with_blender_scores, Blender, get_features_clz
 from common_utils import format_result, save_to_file
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import AdaBoostClassifier
@@ -109,7 +109,7 @@ class BinaryClassifier(Blender):
             evaluator = RankBasedEvaluator()
             relation_filter = None
             for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-                relation_filter = restore_eval_format(
+                relation_filter = eval_with_blender_scores(
                     batch=self.dataset.testing.mapped_triples,
                     scores=ht_scores[ind],
                     target=target,

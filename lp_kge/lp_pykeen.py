@@ -19,7 +19,7 @@ import pandas as pd
 from pykeen.typing import MappedTriples
 from pykeen.utils import resolve_device
 
-from blenders.blender_utils import restore_eval_format
+from blenders.blender_utils import eval_with_blender_scores
 from lp_kge.grouped_classification_evaluator import GroupededClassificationEvaluator
 from lp_kge.grouped_rank_evaluator import GroupedRankBasedEvaluator
 from lp_kge.patched_classification_evaluator import PatchedClassificationEvaluator
