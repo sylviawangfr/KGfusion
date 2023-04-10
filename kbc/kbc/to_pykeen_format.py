@@ -107,8 +107,10 @@ def to_fusion_eval_format_and_save_topk(mapped_triples, pred_scores, all_pos_tri
 
 def calc_hit_at_k(pred_scores, ground_truth_idx):
     """Calculates mean number of hits@k. Higher values are ranked first.
+    the pos scores have been masked
     Returns: list of float, of the same length as hit_positions, containing
         Hits@K score.
+
     """
     # scores[torch.arange(0, batch.shape[0]), batch[:, column]]
     targets = pred_scores[torch.arange(0, pred_scores.shape[0]), ground_truth_idx].unsqueeze(1)
