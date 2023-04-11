@@ -3,8 +3,6 @@ import logging
 import torch
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from context_load_and_run import load_score_context
@@ -13,10 +11,14 @@ from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 from blender_utils import eval_with_blender_scores, Blender, get_features_clz
 from common_utils import format_result, save_to_file
-from sklearn.neural_network import MLPClassifier
-from sklearn.ensemble import AdaBoostClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+if torch.cuda.is_available():
+    import cuml as sk
+    from cuml.svm import SVC
+    from cuml.neural_network import MLPClassifier
+else:
+    import sklearn as sk
+    from sklearn.svm import SVC
+    from sklearn.neural_network import MLPClassifier
 
 
 logger = logging.getLogger(__name__)

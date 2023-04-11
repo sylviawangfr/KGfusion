@@ -31,7 +31,8 @@ class PlattScalingIndividual():
         self.num_neg = params.num_neg
         self.params = params
         self.context = load_score_context(params.models,
-                                          in_dir=params.work_dir
+                                          in_dir=params.work_dir,
+                                          calibration=False
                                           )
 
     def cali(self):
@@ -76,7 +77,7 @@ class PlattScalingIndividual():
             old_shape = self.context[model_name]['preds'].shape
             # individual_cali = logistic.transform(pred_features[index].numpy(), mean_estimate=True)
             logger.info(f"Start transforming {self.model_list[index]}.")
-            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=256 * old_shape[1])
+            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size= 1024 * old_shape[1])
             individual_cali = []
             for batch in tqdm(m_test_dataloader):
                 if self.params.cali == "scaling":
@@ -127,9 +128,9 @@ class PlattScalingIndividual():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CPComplEx")
+    parser.add_argument('--models', type=str, default="CP")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=10)
+    parser.add_argument("--num_neg", type=int, default=5)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="scaling")
     args = parser.parse_args()
