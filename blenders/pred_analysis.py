@@ -104,10 +104,10 @@ def draw_hits_charts(hits_dict, non_hits_dict, x_num, total_num, out_file):
     fig.legend(handles=[mpatches.Patch(color='red', label='hit@1'),
                         mpatches.Patch(color='green', label='hit@3'),
                         mpatches.Patch(color='orange', label='hit@10')],
-               loc='upper center', ncol=3, bbox_to_anchor=(0.5, 1.025))
+               loc='upper right', ncol=3, bbox_to_anchor=(0.96, 0.92))
     axs[0].set_ylabel('num_hits / total_num')
     fig.tight_layout()
-    plt.subplots_adjust(top=0.92, left=0.1)
+    plt.subplots_adjust(top=0.8, left=0.1)
     if len(out_file):
         plt.savefig(out_file, dpi=600)
     fig.show()
