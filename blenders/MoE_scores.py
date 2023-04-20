@@ -153,7 +153,9 @@ class MOEBlender(Blender):
         # predict
         h_preds, t_preds = pred_with_MoE(pred_features, moe_layer)
         # restore format that required by pykeen evaluator
-        ht_scores = [h_preds, t_preds]
+        candidate_number = self.dataset.num_entities
+        ht_scores = [h_preds.reshape([self.dataset.testing.num_triples, candidate_number]),
+                     t_preds.reshape([self.dataset.testing.num_triples, candidate_number])]
         evaluator = RankBasedEvaluator()
         relation_filter = None
         for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):

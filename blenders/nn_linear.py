@@ -155,14 +155,14 @@ def get_MLP(keyword='2'):
 
 
 def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
-    dataset_cls = get_features_clz(para['features'])
+    dataset_cls = get_features_clz(para.features)
     train_data = dataset_cls(mapped_triples, context_resource, all_pos_triples,
-                                                  num_neg=para['num_neg'])
-    train_dataloader = DataLoader(train_data, batch_size=para['batch_size'], shuffle=True, collate_fn=train_data.collate_train)
-    train_loop = get_train_loop(para['loss'])
-    num_epochs = para['epochs']
+                                                  num_neg=para.num_neg)
+    train_dataloader = DataLoader(train_data, batch_size=para.batch_size, shuffle=True, collate_fn=train_data.collate_train)
+    train_loop = get_train_loop(para.loss)
+    num_epochs = para.epochs
     epochs = trange(num_epochs)
-    model_cls = get_MLP(para['linear'])
+    model_cls = get_MLP(para.linear)
     model = model_cls(train_data.dim)
     device: torch.device = resolve_device()
     # logger.info(f"Using device: {device}")
@@ -177,9 +177,9 @@ def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all
         # logger.info("loss: {}".format(train_loss))
         print("loss: {}".format(train_loss))
         epochs.set_postfix_str({"loss: {}".format(train_loss)})
-        if para['mlflow']:
+        if para.mlflow:
             mlflow.log_metric("train_loss", train_loss, step=e)
-    work_dir = para['work_dir']
+    work_dir = para.work_dir
     torch.save(model, os.path.join(work_dir,
                                    'margin_ensemble.pth'))
     return model
@@ -196,7 +196,7 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     # Send tensors to device
     h_preds = []
     t_preds = []
-    dataloader_cls = get_features_clz(para['sampler'])
+    dataloader_cls = get_features_clz(para.features)
     test_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples)
     test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
     for i, batch in enumerate(test_dataloader):
@@ -207,7 +207,9 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     # restore format that required by pykeen evaluator
     h_preds = torch.cat(h_preds, 0)
     t_preds = torch.cat(t_preds, 0)
-    ht_scores = [h_preds, t_preds]
+    candidate_number = para.dataset.num_entities
+    ht_scores = [h_preds.reshape([para.dataset.testing.num_triples, candidate_number]),
+                 t_preds.reshape([para.dataset.testing.num_triples, candidate_number])]
     evaluator = RankBasedEvaluator()
     relation_filter = None
     for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
@@ -226,6 +228,13 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
 class NNLinearBlender(Blender):
     def __init__(self, params):
         super().__init__(params)
+        self.context = load_score_context(params.models,
+                                          in_dir=params.work_dir,
+                                          calibration=True,
+                                          evaluator_key='rank',
+                                          eval_feature=params.eval_feature,
+                                          )
+        self.params.dataset = self.dataset
 
     def aggregate_scores(self):
         if self.params.mlflow:
@@ -244,7 +253,7 @@ class NNLinearBlender(Blender):
         # 3. aggregate scores for testing
         result = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
         str_re = format_result(result)
-        option_str = f"{self.params.dataset}_" \
+        option_str = f"{self.dataset.metadata['name']}_" \
                      f"{'_'.join(self.params.models)}_" \
                      f"feature{self.params.features}_" \
                      f"nn_{self.params.loss}"
@@ -265,6 +274,7 @@ if __name__ == '__main__':
     parser.add_argument('--models', type=str, default="ComplEx_TuckER")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--features', type=int, default=3)
+    parser.add_argument('--eval_feature', type=str, default='rel')
     parser.add_argument('--linear', type=str, default="1")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument("--lr", type=float, default=0.001)

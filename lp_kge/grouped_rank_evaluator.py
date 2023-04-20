@@ -1,13 +1,17 @@
 from collections import defaultdict
-from typing import List, Mapping, MutableMapping, Optional, Sequence, Tuple, Type, TypeVar, Union, cast, Iterable
+from typing import List, Mapping, MutableMapping, Optional, Sequence, Tuple, TypeVar, Iterable
 import numpy as np
 import torch
-from pykeen.evaluation.rank_based_evaluator import _iter_ranks, RankBasedMetricResults, RANKING_METRICS
+from pykeen.constants import TARGET_TO_INDEX
+from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_scores_
+from pykeen.evaluation.rank_based_evaluator import _iter_ranks, RankBasedMetricResults
 from pykeen.evaluation.ranks import Ranks
-from pykeen.metrics.ranking import rank_based_metric_resolver, HITS_METRICS
+from pykeen.metrics.ranking import rank_based_metric_resolver
 from pykeen.evaluation import Evaluator
 from pykeen.typing import Target, RankType, MappedTriples, ExtendedTarget, SIDE_BOTH, RANK_TYPES
 import logging
+
+from torch import FloatTensor
 
 from lp_kge.grouped_classification_evaluator import GroupedMetricResults
 
@@ -66,7 +70,7 @@ def get_metric_Setting():
 
 
 class GroupedRankBasedEvaluator(Evaluator):
-    """A rank-based evaluator for KGE models."""
+    """A rank-based evaluator compat with Pykeen, please use it with Pykeen pipeline"""
 
     num_entities: Optional[int]
     ranks: MutableMapping[Tuple[Target, RankType], List[np.ndarray]]
@@ -109,7 +113,6 @@ class GroupedRankBasedEvaluator(Evaluator):
         self.index_group = {}
         self.eval_triples = []
 
-    # docstr-coverage: inherited
     def process_scores_(
             self,
             hrt_batch: MappedTriples,
@@ -130,10 +133,9 @@ class GroupedRankBasedEvaluator(Evaluator):
             self.ranks[target, rank_type].append(v.detach().cpu().numpy())
         self.num_candidates[target].append(batch_ranks.number_of_options.detach().cpu().numpy())
 
-    # docstr-coverage: inherited
-    def finalize(self) -> GroupedMetricResults:  # noqa: D102
-        if self.num_entities is None:
-            raise ValueError
+    def finalize(self) -> GroupedMetricResults:
+        # if self.num_entities is None:
+        #     raise ValueError
         self.all_ranks = _flatten(self.ranks)
         self.all_num_candidates = _flatten(self.num_candidates)
         group_results = []

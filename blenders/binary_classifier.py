@@ -107,7 +107,9 @@ class BinaryClassifier(Blender):
                 individual_scores.extend(batch_scores[:, 1])
             h_preds, t_preds = torch.chunk(torch.as_tensor(individual_scores), 2, 0)
             # restore format that required by pykeen evaluator
-            ht_scores = [h_preds, t_preds]
+            candidate_number = self.dataset.num_entities
+            ht_scores = [h_preds.reshape([self.dataset.testing.num_triples, candidate_number]),
+                         t_preds.reshape([self.dataset.testing.num_triples, candidate_number])]
             evaluator = RankBasedEvaluator()
             relation_filter = None
             for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):

@@ -148,7 +148,7 @@ def per_rel_eval(mapped_triples, pred_scores, out_dir):
 
 
 def per_mapping_eval(dataset, pred_scores, out_dir):
-    mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
+    mappings = ['1-1', '1-n', 'n-1', 'n-m']
     rel_mappings = find_relation_mappings(dataset)
     tri_df = pd.DataFrame(data=dataset.validation.mapped_triples.numpy(), columns=['h', 'r', 't'])
     head_tail_mrr = []

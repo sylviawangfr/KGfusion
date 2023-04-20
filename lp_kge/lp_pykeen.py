@@ -1,9 +1,8 @@
 import argparse
-import gc
-from pykeen.evaluation import RankBasedEvaluator, ClassificationEvaluator
+from pykeen.evaluation import RankBasedEvaluator
 from pykeen.evaluation.evaluator import optional_context_manager, create_sparse_positive_filter_, filter_scores_
 from pykeen.models import Model
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL, InductiveMode, MappedTriples, COLUMN_HEAD, COLUMN_TAIL
+from pykeen.typing import LABEL_HEAD, LABEL_TAIL, InductiveMode, COLUMN_HEAD, COLUMN_TAIL
 from pykeen.utils import (
     split_list_in_batches_iter,
 )
@@ -12,14 +11,13 @@ import numpy as np
 from tqdm.autonotebook import tqdm
 import logging
 from typing import List
-from pykeen.datasets import FB15k237, Nations, UMLS, get_dataset
+from pykeen.datasets import FB15k237, get_dataset
 import pykeen
 import torch
 import pandas as pd
 from pykeen.typing import MappedTriples
 from pykeen.utils import resolve_device
 
-from blenders.blender_utils import eval_with_blender_scores
 from lp_kge.grouped_classification_evaluator import GroupededClassificationEvaluator
 from lp_kge.grouped_rank_evaluator import GroupedRankBasedEvaluator
 from lp_kge.patched_classification_evaluator import PatchedClassificationEvaluator
@@ -233,9 +231,9 @@ def find_relation_mappings(dataset: pykeen.datasets.Dataset):
                              dataset.testing.mapped_triples], 0)
     df = pd.DataFrame(data=all_triples.numpy(), columns=['h', 'r', 't'])
     del all_triples
-    hr2t = df.groupby(['h', 'r'], group_keys=True, as_index=False)['t'].nunique()
-    hr2t_1 = hr2t.groupby('r', group_keys=True, as_index=False)['t'].sum()
-    hr2t_2 = hr2t.groupby('r', group_keys=True, as_index=False)['h'].nunique()
+    hr2t = df.groupby(['h', 'r'], group_keys=True, as_index=False)['t'].nunique() # 't' column now is the number of unique ids
+    hr2t_1 = hr2t.groupby('r', group_keys=True, as_index=False)['t'].sum() # r: number of tail entities
+    hr2t_2 = hr2t.groupby('r', group_keys=True, as_index=False)['h'].nunique() # r: number of unique head entities
 
     rt2h = df.groupby(['r', 't'], group_keys=True, as_index=False)['h'].nunique()
     rt2h_1 = rt2h.groupby('r', group_keys=True, as_index=False)['h'].sum()
@@ -249,10 +247,10 @@ def find_relation_mappings(dataset: pykeen.datasets.Dataset):
     one2n = ht_mappings[(ht_mappings['h2t'] < 1.5) & (ht_mappings['t2h'] >= 1.5)]['r'].values
     n2one = ht_mappings[(ht_mappings['h2t'] >= 1.5) & (ht_mappings['t2h'] < 1.5)]['r'].values
     n2m = ht_mappings[(ht_mappings['h2t'] >= 1.5) & (ht_mappings['t2h'] >= 1.5)]['r'].values
-    rel_groups = {'one_to_one': one2one,
-                  'one_to_many': one2n,
-                  'many_to_one': n2one,
-                  'many_to_many': n2m}
+    rel_groups = {'1-1': one2one,
+                  '1-n': one2n,
+                  'n-1': n2one,
+                  'n-m': n2m}
 
     return rel_groups
 
@@ -350,7 +348,7 @@ class LpKGE:
         save2json(t_ent2idx, self.work_dir + f"{evaluator_key}_t_ent2idx.json")
 
     def dev_mapping_eval(self, evaluator_key):
-        mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
+        mappings = ['1-1', '1-n', 'n-1', 'n-m']
         rel_mappings = find_relation_mappings(self.dataset)
         dev = self.dataset.validation.mapped_triples
         triples_df = pd.DataFrame(data=dev.numpy(), columns=['h', 'r', 't'])
@@ -421,8 +419,8 @@ if __name__ == '__main__':
     param1.update({"models": args.models.split('_')})
     pykeen_lp = LpKGE(dataset=param1['dataset'], models=param1['models'], work_dir=param1['work_dir'])
     eval_key = param1['evaluator_key']
-    pykeen_lp.dev_eval()
-    pykeen_lp.dev_rel_eval(eval_key)
+    # pykeen_lp.dev_eval()
+    # pykeen_lp.dev_rel_eval(eval_key)
     # pykeen_lp.dev_ent_eval(eval_key)
     pykeen_lp.dev_mapping_eval(eval_key)
     pykeen_lp.predict_scores(top_k=100)

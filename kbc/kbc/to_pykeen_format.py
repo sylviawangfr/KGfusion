@@ -150,7 +150,7 @@ def per_rel_eval(mapped_triples, scores, out_dir):
 
 
 def per_mapping_eval(pykeen_dataset, scores, out_dir):
-    mappings = ['one_to_one', 'one_to_many', 'many_to_one', 'many_to_many']
+    mappings = ['1-1', '1-n', 'n-1', 'n-m']
     rel_mappings = find_relation_mappings(pykeen_dataset)
     dev = pykeen_dataset.validation.mapped_triples
     triples_df = pd.DataFrame(data=dev.numpy(), columns=['h', 'r', 't'], )

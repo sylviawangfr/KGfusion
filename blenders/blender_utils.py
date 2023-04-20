@@ -36,23 +36,6 @@ def eval_with_blender_scores(
         all_pos_triples: Optional[MappedTriples],
         relation_filter: Optional[torch.BoolTensor],
 ) -> torch.BoolTensor:
-    candidate_number = int(scores.shape[0] / batch.shape[0])
-    reformatted_scores = scores.reshape([batch.shape[0], candidate_number])
-    return eval_with_formatted_scores(batch,
-                                      reformatted_scores,
-                                      target, evaluator,
-                                      all_pos_triples,
-                                      relation_filter)
-
-
-def eval_with_formatted_scores(
-        batch: MappedTriples,
-        scores: FloatTensor,
-        target: Target,
-        evaluator: Evaluator,
-        all_pos_triples: Optional[MappedTriples],
-        relation_filter: Optional[torch.BoolTensor],
-) -> torch.BoolTensor:
     """
     Evaluate ranking for batch.
     :param scores:
