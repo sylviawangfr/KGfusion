@@ -74,7 +74,7 @@ def cut_tail_and_split(degree2ids, num_patt):
     total = sum([len(list(l)) for l in degree2ids.values()])
     for i, ids in degree2ids.items():
         id_count += len(ids)
-        if id_count / total >= 0.95:
+        if id_count / total >= 0.99:
             tail_degree = i
             break
     range_degree = range(0, tail_degree + 1)
