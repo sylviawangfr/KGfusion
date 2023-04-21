@@ -1,21 +1,12 @@
 import argparse
-from collections import Counter
-from typing import Optional
 import numpy as np
 import pandas as pd
 import torch
-from pykeen.constants import TARGET_TO_INDEX
-from pykeen.datasets import get_dataset
-from pykeen.evaluation.evaluator import filter_scores_, create_sparse_positive_filter_
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL, MappedTriples, Target
 from tabulate import tabulate
-from torch import FloatTensor
-
 import common_utils
 from analysis.group_eval_utils import group_rank_eval, AnalysisChart
 from lp_kge.lp_pykeen import find_relation_mappings
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 
 
 class RelChart(AnalysisChart):
@@ -160,7 +151,6 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="True")
-    # parser.add_argument('--partition', type=str, default="rel_mapping")
     args = parser.parse_args()
     args.models = args.models.split('_')
     tmp = RelMappingChart(args)

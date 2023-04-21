@@ -132,7 +132,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="anyburl_CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=1)
+    parser.add_argument("--num_neg", type=int, default=4)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--eval_feature', type=str, default='rel')
     # "1": PerRelDataset,

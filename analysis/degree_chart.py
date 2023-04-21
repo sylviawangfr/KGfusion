@@ -1,23 +1,16 @@
 import argparse
 from collections import OrderedDict
-from typing import Optional
 import numpy as np
 import pandas as pd
 import torch
-from pykeen.constants import TARGET_TO_INDEX
 from pykeen.datasets import get_dataset
-from pykeen.evaluation.evaluator import filter_scores_, create_sparse_positive_filter_
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL, MappedTriples, Target
 from tabulate import tabulate
-from torch import FloatTensor
-from itertools import zip_longest, chain
-
+from itertools import chain
 import common_utils
 from analysis.group_eval_utils import group_rank_eval, AnalysisChart
 from context_load_and_run import load_score_context
-from lp_kge.lp_pykeen import get_all_pos_triples, find_relation_mappings
+from lp_kge.lp_pykeen import get_all_pos_triples
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import matplotlib.colors as mcolors
 
 
