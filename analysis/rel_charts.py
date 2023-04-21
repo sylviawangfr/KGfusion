@@ -104,7 +104,7 @@ class RelMappingChart(AnalysisChart):
         fig, ax = plt.subplots()
         ax.pie(values, labels=labels, autopct='%1.1f%%')
         ax.set_title(f"{title_keyword} Partitions on Relation Mappings")
-        plt.savefig(self.params.work_dir + f'figs/{title_keyword}_rel_mapping_partition.png', dpi=600)
+        plt.savefig(self.params.work_dir + f'figs/{title_keyword}_rel_mapping_pie.png', dpi=600)
 
     def _to_table(self, m2eval):
         # header2 = ['', '1-1\nh', '1-1\nt', '1-1\nb',
