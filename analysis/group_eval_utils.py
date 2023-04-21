@@ -64,17 +64,20 @@ def group_rank_eval(dataset, mapped_triples, group_idx_iter, scores_in_pykeen_fo
     # eval groups
     head_tail_eval = {}
     for key, g_index in group_idx_iter.items():
-        g_triples = mapped_triples[g_index]
-        g_heads = g_triples[:, 0]
-        g_tails = g_triples[:, 2]
-        g_h_preds = ht_scores[0][g_index]
-        g_t_preds = ht_scores[1][g_index]
-        head_hits = calc_hit_at_k(g_h_preds, g_heads)
-        tail_hits = calc_hit_at_k(g_t_preds, g_tails)
-        both_hit = calc_hit_at_k(torch.cat([g_h_preds, g_t_preds]), torch.cat((g_heads, g_tails)))
-        head_tail_eval.update({key: torch.as_tensor([head_hits,
-                                                     tail_hits,
-                                                     both_hit])})
+        if len(g_index) == 0:
+            head_tail_eval.update({key: torch.zeros((4, 3))})
+        else:
+            g_triples = mapped_triples[g_index]
+            g_heads = g_triples[:, 0]
+            g_tails = g_triples[:, 2]
+            g_h_preds = ht_scores[0][g_index]
+            g_t_preds = ht_scores[1][g_index]
+            head_hits = calc_hit_at_k(g_h_preds, g_heads)
+            tail_hits = calc_hit_at_k(g_t_preds, g_tails)
+            both_hit = calc_hit_at_k(torch.cat([g_h_preds, g_t_preds]), torch.cat((g_heads, g_tails)))
+            head_tail_eval.update({key: torch.as_tensor([head_hits,
+                                                         tail_hits,
+                                                         both_hit])})
     return head_tail_eval
 
 

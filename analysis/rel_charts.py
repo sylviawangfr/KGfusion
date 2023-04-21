@@ -11,6 +11,7 @@ from pykeen.typing import LABEL_HEAD, LABEL_TAIL, MappedTriples, Target
 from tabulate import tabulate
 from torch import FloatTensor
 
+import common_utils
 from analysis.group_eval_utils import group_rank_eval, AnalysisChart
 from lp_kge.lp_pykeen import find_relation_mappings
 import matplotlib.pyplot as plt
@@ -103,17 +104,26 @@ class RelMappingChart(AnalysisChart):
         min_y = 0.9 * min_y if 0.9 * min_y < 0.5 else 0.5
         max_y = 1.1 * max_y if 1.1 * max_y < 1 else 1
         ax.set_ylim(min_y, max_y)
-        plt.show()
+        # plt.show()
+        plt.savefig(self.params.work_dir + f'figs/rel_mapping_eval.png', dpi=600)
 
-    def _to_pie_chart(self, key2tri_ids):
+    def _to_pie_chart(self, key2tri_ids, title_keyword):
         labels = key2tri_ids.keys()
         values = [len(key2tri_ids[t]) for t in key2tri_ids]
         fig, ax = plt.subplots()
-        ax.pie(values, labels=labels)
-        plt.show()
+        ax.pie(values, labels=labels, autopct='%1.1f%%')
+        ax.set_title(f"{title_keyword} Partitions on Relation Mappings")
+        plt.savefig(self.params.work_dir + f'figs/{title_keyword}_rel_mapping_partition.png', dpi=600)
 
     def _to_table(self, m2eval):
-        header2 = ['', '1-1\nh', '1-1\nt', '1-n\nh', '1-n\nt', 'n-1\nh', 'n-1\nt', 'n-m\nh', 'n-m\nt']
+        # header2 = ['', '1-1\nh', '1-1\nt', '1-1\nb',
+        #            '1-n\nh', '1-n\nt', '1-n\nb',
+        #            'n-1\nh', 'n-1\nt', 'n-1\nb',
+                   # 'n-m\nh', 'n-m\nt', 'n-m\nb']
+        header = ['', '1-1\nh', '1-1\nt',
+                   '1-n\nh', '1-n\nt',
+                   'n-1\nh', 'n-1\nt',
+                   'n-m\nh', 'n-m\nt']
         data = []
         for m in self.params.models:
             m_data = [m]
@@ -124,12 +134,22 @@ class RelMappingChart(AnalysisChart):
                 else:
                     m_data.extend([0, 0])
             data.append(m_data)
-        print(tabulate(data, header2, tablefmt="simple_grid", numalign="center"))
+        table_simple = tabulate(data, header, tablefmt="simple_grid", numalign="center")
+        table_latex = tabulate(data, header, tablefmt="latex", numalign="center")
+        common_utils.save_to_file(table_simple, self.params.work_dir + f'figs/rel_mapping_eval.txt', mode='w')
+        common_utils.save_to_file(table_latex, self.params.work_dir + f'figs/rel_mapping_eval.txt', mode='a')
 
     def analyze(self):
+        common_utils.init_dir(self.params.work_dir + 'figs/')
+        all_tris = torch.cat([self.dataset.testing.mapped_triples,
+                              self.dataset.validation.mapped_triples,
+                              self.dataset.training.mapped_triples], 0)
+        all_key2tri_ids = self.make_partitions(all_tris)
+        del all_tris
+        self._to_pie_chart(all_key2tri_ids, "Dataset")
         key2tri_ids = self.make_partitions(self.dataset.testing.mapped_triples)
+        self._to_pie_chart(key2tri_ids, "Testset")
         m2eval = self.get_partition_eval_per_model(key2tri_ids)
-        self._to_pie_chart(key2tri_ids)
         self._to_bar_chart(m2eval)
         self._to_table(m2eval)
 
