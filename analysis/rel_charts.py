@@ -125,8 +125,8 @@ class RelMappingChart(AnalysisChart):
                 else:
                     m_data.extend([0, 0])
             data.append(m_data)
-        table_simple = tabulate(data, header, tablefmt="simple_grid", numalign="center")
-        table_latex = tabulate(data, header, tablefmt="latex", numalign="center")
+        table_simple = tabulate(data, header, tablefmt="simple_grid", numalign="center", floatfmt=".3f")
+        table_latex = tabulate(data, header, tablefmt="latex", numalign="center", floatfmt=".3f")
         common_utils.save_to_file(table_simple, self.params.work_dir + f'figs/rel_mapping_eval.txt', mode='w')
         common_utils.save_to_file(table_latex, self.params.work_dir + f'figs/rel_mapping_eval.txt', mode='a')
 

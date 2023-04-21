@@ -213,8 +213,8 @@ class EntDegreeChart(AnalysisChart):
                 for d in m_d2eval:
                     m_data.extend([m_d2eval[d][0, -1].item(), m_d2eval[d][1, -1].item()])
                 data.append(m_data)
-            table_simple = tabulate(data, header, tablefmt="simple_grid", numalign="center")
-            table_latex = tabulate(data, header, tablefmt="latex", numalign="center")
+            table_simple = tabulate(data, header, tablefmt="simple_grid", numalign="center", floatfmt=".3f")
+            table_latex = tabulate(data, header, tablefmt="latex", numalign="center", floatfmt=".3f")
             common_utils.save_to_file(table_simple, self.params.work_dir + f'figs/{target}_degree_eval.txt', mode='w')
             common_utils.save_to_file(table_latex, self.params.work_dir + f'figs/{target}_degree_eval.txt', mode='a')
 
