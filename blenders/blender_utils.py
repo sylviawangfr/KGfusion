@@ -5,6 +5,8 @@ from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_d
 from pykeen.typing import MappedTriples, Target
 from torch import FloatTensor
 import torch
+
+import common_utils
 from features.feature_per_ent_dataset import PerEntDataset
 from features.feature_per_model_both_dataset import PerModelBothDataset
 from features.feature_per_rel_both_dataset import PerRelBothDataset
@@ -21,6 +23,8 @@ class Blender(ABC):
             dataset=params.dataset
         )
         self.params = params
+        self.log_dir = self.params.work_dir + "logs/"
+        common_utils.init_dir(self.log_dir)
 
 
     @abstractmethod

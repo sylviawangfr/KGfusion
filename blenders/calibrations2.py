@@ -90,7 +90,7 @@ class CalibrationBlender2(Blender):
         result = evaluator.finalize()
         str_re = format_result(result)
         option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_ScallinCali2"
-        save_to_file(str_re, work_dir + f"{option_str}.log")
+        save_to_file(str_re, self.log_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         return result
 

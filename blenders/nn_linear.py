@@ -257,7 +257,7 @@ class NNLinearBlender(Blender):
                      f"{'_'.join(self.params.models)}_" \
                      f"feature{self.params.features}_" \
                      f"nn_{self.params.loss}"
-        save_to_file(str_re, self.params.work_dir + f"{option_str}.log")
+        save_to_file(str_re, self.log_dir + f"{option_str}.log")
         print(f"{option_str}:\n{str_re}")
         if self.params.mlflow:
             mlflow.log_param('result', str_re)
