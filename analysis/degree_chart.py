@@ -117,14 +117,14 @@ class EntDegreeChart(AnalysisChart):
             target2tri_idx.update({target: degrees2tri_idx})
         return target2tri_idx
 
-    def make_partitions(self, mapped_triples, target2degrees, ptt_num=0, all_target2degree2trids=None):
+    def make_partitions(self, mapped_triples, target2degrees, all_target2degree2trids=None):
         # if the degree range is not suitable to draw as x-ticks, we can aggregate them to number of partitions.
         tri_df = pd.DataFrame(data=mapped_triples, columns=['h', 'r', 't'])
         query_strs = ["h in @ent_ids", "t in @ent_ids", "h in @ent_ids or t in @ent_ids"]
         target2tri_idx = dict()
         for i, (target, degree2ent_ids) in enumerate(target2degrees.items()):
             degrees2tri_idx = dict()
-            x_slots = cut_tail_and_split(all_target2degree2trids[target], ptt_num)
+            x_slots = cut_tail_and_split(all_target2degree2trids[target], self.params.num_p)
             for slot_degrees in x_slots:
                 slot_entids = [degree2ent_ids[d] for d in slot_degrees if d in degree2ent_ids]
                 ent_ids = list(chain.from_iterable(slot_entids))
@@ -161,6 +161,7 @@ class EntDegreeChart(AnalysisChart):
             ax.set_xlabel(f'{target} Degree')
             ax.set_xticks(degree, degree2ids.keys())
             ax.set_title(f'{target} Degree Distribution')
+            plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
             plt.savefig(self.params.work_dir + f'figs/{y_lable}_per_{target}_degree_partition.png', dpi=600)
 
     def _to_pie_chart(self, target2degree2ids, title_keyword):
@@ -170,14 +171,14 @@ class EntDegreeChart(AnalysisChart):
             fig, ax = plt.subplots()
             ax.pie(values, labels=legend, autopct='%1.1f%%')
             ax.set_title(f"{title_keyword} Partitions on {target}-degree")
-            plt.savefig(self.params.work_dir + f'figs/{title_keyword}_{target}_degree_partition.png', dpi=600)
+            plt.savefig(self.params.work_dir + f'figs/{title_keyword}_{target}_degree_pie.png', dpi=600)
 
-    def _to_degree_eval_charts(self, target2m2degree_eval, num_ptt):
+    def _to_degree_eval_charts(self, target2m2degree_eval):
         to_pick_colors = list(mcolors.TABLEAU_COLORS.values())
         colors = {m: to_pick_colors[idx] for idx, m in enumerate(self.params.models)}
         ax_titles = ['Head', 'Tail', 'Both']
         for target, m2degree2eval in target2m2degree_eval.items():
-            x = np.arange(0, num_ptt)
+            x = np.arange(0, self.params.num_p)
             fig, axs = plt.subplots(1, 3, sharex=False, sharey=True, figsize=[12, 4])
             # draw lines for all degree set
             width = 0.15  # the width of the bars
@@ -224,16 +225,16 @@ class EntDegreeChart(AnalysisChart):
                               self.dataset.validation.mapped_triples,
                               self.dataset.training.mapped_triples], 0)
         all_target2degrees2trids_per_degree = self.make_partition_per_degree(all_tris, target2degrees2entids)
-        all_target2degrees2trids = self.make_partitions(all_tris, target2degrees2entids, 5, all_target2degrees2trids_per_degree)
+        all_target2degrees2trids = self.make_partitions(all_tris, target2degrees2entids, all_target2degrees2trids_per_degree)
         del all_tris
-        self._to_pie_chart(all_target2degrees2trids, 'Dataset')
+        # self._to_pie_chart(all_target2degrees2trids, 'Dataset')
         self._to_degree_distribution_charts(all_target2degrees2trids, "Triple")
         test_target2degrees2tri_per = self.make_partition_per_degree(self.dataset.testing.mapped_triples, target2degrees2entids)
-        test_target2degree2tri = self.make_partitions(self.dataset.testing.mapped_triples, target2degrees2entids, 5, test_target2degrees2tri_per)
+        test_target2degree2tri = self.make_partitions(self.dataset.testing.mapped_triples, target2degrees2entids, test_target2degrees2tri_per)
         self._to_pie_chart(test_target2degree2tri, 'Test')
         target2m2degree_eval = self.get_partition_eval(test_target2degree2tri)
         self._to_table(target2m2degree_eval)
-        self._to_degree_eval_charts(target2m2degree_eval, 5)
+        self._to_degree_eval_charts(target2m2degree_eval)
 
 
 if __name__ == '__main__':
@@ -242,6 +243,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="True")
+    parser.add_argument('--num_p', type=int, default=10)
     args = parser.parse_args()
     args.models = args.models.split('_')
     anlz = EntDegreeChart(args)
