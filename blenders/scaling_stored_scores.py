@@ -10,7 +10,7 @@ from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from blenders.blender_utils import eval_with_blender_scores, eval_with_formatted_scores
+from blenders.blender_utils import eval_with_blender_scores
 from common_utils import format_result
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
@@ -113,7 +113,7 @@ class PlattScalingIndividual():
         evaluator = RankBasedEvaluator()
         relation_filter = None
         for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = eval_with_formatted_scores(
+            relation_filter = eval_with_blender_scores(
                 batch=self.dataset.testing.mapped_triples,
                 scores=ht_scores[ind],
                 target=target,

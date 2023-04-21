@@ -196,7 +196,7 @@ class EntDegreeChart(AnalysisChart):
                 plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
                 ax.set_title(ax_titles[idx])
             fig.legend(colors.keys(), loc='upper center', ncol=len(self.params.models))
-            plt.subplots_adjust(top=0.85, left=0.05, bottom=0.15, right=0.99)
+            plt.subplots_adjust(top=0.85, left=0.08, bottom=0.15, right=0.99)
             plt.savefig(self.params.work_dir + f'figs/{target}_degree_eval.png', dpi=600)
             # plt.show()
 
