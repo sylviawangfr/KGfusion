@@ -162,7 +162,7 @@ class EntDegreeChart(AnalysisChart):
             ax.set_xticks(degree, degree2ids.keys())
             ax.set_title(f'{target} Degree Distribution')
             plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
-            plt.savefig(self.params.work_dir + f'figs/{y_lable}_per_{target}_degree_partition.png', dpi=600)
+            plt.savefig(self.params.work_dir + f'figs/{y_lable}_{target}_degree_partition.png', dpi=600)
 
     def _to_pie_chart(self, target2degree2ids, title_keyword):
         for target, degree2ids in target2degree2ids.items():
@@ -231,7 +231,8 @@ class EntDegreeChart(AnalysisChart):
         self._to_degree_distribution_charts(all_target2degrees2trids, "Triple")
         test_target2degrees2tri_per = self.make_partition_per_degree(self.dataset.testing.mapped_triples, target2degrees2entids)
         test_target2degree2tri = self.make_partitions(self.dataset.testing.mapped_triples, target2degrees2entids, test_target2degrees2tri_per)
-        self._to_pie_chart(test_target2degree2tri, 'Test')
+        # self._to_pie_chart(test_target2degree2tri, 'Test')
+        self._to_degree_distribution_charts(test_target2degree2tri, "Test")
         target2m2degree_eval = self.get_partition_eval(test_target2degree2tri)
         self._to_table(target2m2degree_eval)
         self._to_degree_eval_charts(target2m2degree_eval)
