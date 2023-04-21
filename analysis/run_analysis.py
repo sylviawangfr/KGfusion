@@ -9,6 +9,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="True")
+    parser.add_argument('--num_p', type=int, default=10)
     args = parser.parse_args()
     args.models = args.models.split('_')
     jobs = [EntDegreeChart, RelMappingChart]
