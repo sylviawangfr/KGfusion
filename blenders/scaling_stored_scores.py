@@ -68,8 +68,11 @@ class PlattScalingIndividual():
             model_name = self.model_list[index]
             if self.params.cali == "scaling":
                 logger.info("using LogisticCalibration")
-                cali = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
-                                   use_cuda=use_cuda, vi_epochs=500)
+                cali = LogisticCalibration(method='variational',
+                                           detection=False,
+                                           independent_probabilities=True,
+                                           use_cuda=use_cuda,
+                                           vi_epochs=500)
             else:
                 logger.info("using IsotonicRegression")
                 cali = IsotonicRegression(detection=True, independent_probabilities=True)
@@ -81,11 +84,11 @@ class PlattScalingIndividual():
             old_shape = self.context[model_name]['preds'].shape
             # individual_cali = logistic.transform(pred_features[index].numpy(), mean_estimate=True)
             logger.info(f"Start transforming {self.model_list[index]}.")
-            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size= 1024 * old_shape[1])
+            m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=1024 * old_shape[1])
             individual_cali = []
             for batch in tqdm(m_test_dataloader):
                 if self.params.cali == "scaling":
-                    batch_individual_cali = cali.transform(batch.numpy(), num_samples=100).mean(0)
+                    batch_individual_cali = cali.transform(batch.numpy(), num_samples=1000).mean(0)
                 else:
                     batch_individual_cali = cali.transform(batch.numpy())
                 individual_cali.extend(batch_individual_cali)
@@ -94,8 +97,8 @@ class PlattScalingIndividual():
                     torch.cuda.empty_cache()
 
             h_preds, t_preds = torch.chunk(torch.as_tensor(individual_cali), 2, 0)
-            h_preds = torch.reshape(h_preds, (old_shape[0], int(old_shape[1]/2)))
-            t_preds = torch.reshape(t_preds, (old_shape[0], int(old_shape[1]/2)))
+            h_preds = torch.reshape(h_preds, (old_shape[0], int(old_shape[1] / 2)))
+            t_preds = torch.reshape(t_preds, (old_shape[0], int(old_shape[1] / 2)))
             individual_cali = torch.cat([h_preds, t_preds], 1)
             torch.save(individual_cali, self.work_dir + f"{model_name}/cali_preds.pt")
             logger.info(f"Transforming saved for {self.model_list[index]}.")
@@ -132,9 +135,9 @@ class PlattScalingIndividual():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CPComplEx")
+    parser.add_argument('--models', type=str, default="anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=4)
+    parser.add_argument("--num_neg", type=int, default=5)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="scaling")
     args = parser.parse_args()
