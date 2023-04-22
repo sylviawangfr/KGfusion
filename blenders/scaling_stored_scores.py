@@ -52,6 +52,8 @@ class PlattScalingIndividual():
         pos = pos[keep_index1]
         keep_index2 = (neg > 0).nonzero(as_tuple=True)[0]
         neg = neg[keep_index2]
+        logger.info(f"pos num: {pos.shape[0]}")
+        logger.info(f"neg num: {neg.shape[0]}")
         inputs = torch.cat([pos, neg], 0)
         labels = torch.cat([torch.ones(pos.shape[0], 1),
                             torch.zeros(neg.shape[0], 1)], 0).numpy()
@@ -65,9 +67,11 @@ class PlattScalingIndividual():
         for index, m in enumerate(model_features):
             model_name = self.model_list[index]
             if self.params.cali == "scaling":
+                logger.info("using LogisticCalibration")
                 cali = LogisticCalibration(method='variational', detection=True, independent_probabilities=True,
                                    use_cuda=use_cuda, vi_epochs=500)
             else:
+                logger.info("using IsotonicRegression")
                 cali = IsotonicRegression(detection=True, independent_probabilities=True)
 
             gc.collect()
@@ -128,7 +132,7 @@ class PlattScalingIndividual():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CP")
+    parser.add_argument('--models', type=str, default="CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=4)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
