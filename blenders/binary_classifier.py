@@ -55,7 +55,7 @@ class BinaryClassifier(Blender):
         super().__init__(params)
         self.context = load_score_context(params.models,
                                           in_dir=params.work_dir,
-                                          calibration=True,
+                                          calibration=False,
                                           evaluator_key='rank',
                                           eval_feature=params.eval_feature,
                                           )

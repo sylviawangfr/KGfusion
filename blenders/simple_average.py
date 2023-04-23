@@ -53,10 +53,10 @@ class SimpleAverageBlender(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CP")
+    parser.add_argument('--models', type=str, default="anyburl_CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--cali', type=str, default="False")
+    parser.add_argument('--cali', type=str, default="True")
     args = parser.parse_args()
     args.models = args.models.split('_')
     wab = SimpleAverageBlender(args)
