@@ -1,6 +1,8 @@
 import argparse
 import gc
 import logging
+import sys
+
 import torch
 from netcal.binning import IsotonicRegression
 from netcal.scaling import LogisticCalibration, TemperatureScaling
@@ -69,7 +71,7 @@ class PlattScalingIndividual():
             if self.params.cali == "variational":
                 logger.info("using LogisticCalibration")
                 cali = LogisticCalibration(method='variational',
-                                           detection=False,
+                                           detection=True,
                                            independent_probabilities=True,
                                            use_cuda=use_cuda,
                                            vi_epochs=500)
@@ -83,6 +85,9 @@ class PlattScalingIndividual():
                                            independent_probabilities=True,
                                            momentum_epochs=500,
                                            vi_epochs=500)
+            else:
+                logger.info("unsupported cali function, please set cali in ['variational', 'isotonic', 'momentum']")
+                sys.exit()
             gc.collect()
             if use_cuda:
                 torch.cuda.empty_cache()
