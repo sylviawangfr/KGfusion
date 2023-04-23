@@ -69,14 +69,14 @@ class PlattScalingIndividual():
         for index, m in enumerate(model_features):
             model_name = self.model_list[index]
             if self.params.cali == "variational":
-                logger.info("using LogisticCalibration")
+                logger.info("using variational")
                 cali = LogisticCalibration(method='variational',
                                            detection=True,
                                            independent_probabilities=True,
                                            use_cuda=use_cuda,
                                            vi_epochs=500)
             elif self.params.cali == 'isotonic':
-                logger.info("using IsotonicRegression")
+                logger.info("using isotonic")
                 cali = IsotonicRegression(detection=True, independent_probabilities=True)
             elif self.params.cali == 'momentum':
                 logger.info("using momentum")

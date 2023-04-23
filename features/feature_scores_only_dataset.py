@@ -29,7 +29,7 @@ class ScoresOnlyDataset(FusionDataset):
             # tri get neg scores
             m_neg_scores = m_context['eval_neg_scores']
             m_neg_index_topk4 = m_context['eval_neg_index']
-            scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
+            scores_neg.append(m_neg_scores)  #
             neg_index_topk_times.append(m_neg_index_topk4)
 
         # # pos feature [m1_s1,m2_s1,....]
