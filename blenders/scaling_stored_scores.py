@@ -3,7 +3,7 @@ import gc
 import logging
 import torch
 from netcal.binning import IsotonicRegression
-from netcal.scaling import LogisticCalibration
+from netcal.scaling import LogisticCalibration, TemperatureScaling
 from pykeen.datasets import get_dataset
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
@@ -73,10 +73,16 @@ class PlattScalingIndividual():
                                            independent_probabilities=True,
                                            use_cuda=use_cuda,
                                            vi_epochs=500)
-            else:
+            elif self.params.cali == 'isotonic':
                 logger.info("using IsotonicRegression")
                 cali = IsotonicRegression(detection=True, independent_probabilities=True)
-
+            elif self.params.cali == 'momentum':
+                logger.info("using momentum")
+                cali = LogisticCalibration(method='momentum',
+                                           detection=True,
+                                           independent_probabilities=True,
+                                           momentum_epochs=500,
+                                           vi_epochs=500)
             gc.collect()
             if use_cuda:
                 torch.cuda.empty_cache()
@@ -137,9 +143,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="CPComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=5)
+    parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
-    parser.add_argument('--cali', type=str, default="scaling")
+    parser.add_argument('--cali', type=str, default="momentum")
     args = parser.parse_args()
     args.models = args.models.split('_')
     wab = PlattScalingIndividual(args)
