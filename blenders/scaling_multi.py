@@ -11,7 +11,7 @@ from pykeen.evaluation import RankBasedEvaluator
 from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
+import numpy as np
 from blenders.blender_utils import eval_with_blender_scores
 from common_utils import format_result
 from context_load_and_run import load_score_context
@@ -49,11 +49,21 @@ class PlattScalingIndividual():
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
         pos, neg = dev_feature_dataset.get_all_dev_examples()
-        keep_index1 = (pos > 0).nonzero(as_tuple=True)[0]
-        neg = neg.reshape(pos.shape[0], self.num_neg)[keep_index1].flatten().unsqueeze(1)
+        # keep_index1 = (pos > 0).nonzero(as_tuple=True)[0]
+        # neg = neg.reshape(pos.shape[0], self.num_neg, pos.shape[-1])[keep_index1].flatten().unsqueeze(1)
+        # pos = pos[keep_index1]
+        # keep_index2 = (neg > 0).nonzero(as_tuple=True)[0]
+        # neg = neg[keep_index2]
+
+        remove_index1 = (pos == 0).nonzero(as_tuple=True)[0]
+        keep_index1 = np.delete(np.arange(pos.shape[0]), remove_index1.numpy(), 0)
+        neg = neg.reshape(pos.shape[0], int(neg.shape[0]/pos.shape[0]), neg.shape[-1])[keep_index1]
+        neg = neg.reshape(neg.shape[0] * neg.shape[1], neg.shape[-1])
         pos = pos[keep_index1]
-        keep_index2 = (neg > 0).nonzero(as_tuple=True)[0]
+        remove_index2 = (neg == 0).nonzero(as_tuple=True)[0]
+        keep_index2 = np.delete(np.arange(neg.shape[0]), remove_index2.numpy(), 0)
         neg = neg[keep_index2]
+
         logger.info(f"pos num: {pos.shape[0]}")
         logger.info(f"neg num: {neg.shape[0]}")
         inputs = torch.cat([pos, neg], 0)
