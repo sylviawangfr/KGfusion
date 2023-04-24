@@ -84,7 +84,7 @@ class CalibrationBlender1(Blender):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CPComplEx_anyburl")
+    parser.add_argument('--models', type=str, default="CP")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=4)
     parser.add_argument("--cali", type=str, default="scaling")

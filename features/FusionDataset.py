@@ -100,9 +100,9 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
         max_index = torch.max(topk_idx)  # number of original candidates
         tmp_scores = neg_scores[target].squeeze(2)
         tmp_topk = torch.clone(topk_idx)
-        # add one extra column to handle the -999.0/-1 mask values. the masked values are not selected anyway.
+        # add one extra column to handle the -999.0/-1 mask values. the masked values are not selected.
         tmp_topk[tmp_topk == -1] = max_index + 1
-        scattered_scores = torch.zeros([tmp_topk.shape[0], tmp_topk.shape[1], max_index + 2]).scatter_(2, tmp_topk, tmp_scores) # sigmoid scores [0-1]
+        scattered_scores = torch.zeros([tmp_topk.shape[0], tmp_topk.shape[1], max_index + 2]).scatter_(2, tmp_topk, tmp_scores) # sigmoid scores to [0-1]
         # target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
         target_neg_scores = scattered_scores.transpose(0, 1).transpose(1, 2)
         # count top_k frequent index
@@ -118,10 +118,10 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
         target_neg_scores = target_neg_scores[torch.arange(0, target_neg_scores.shape[0]).unsqueeze(1), fill_topk]
         selected_scores.append(target_neg_scores)
 
-    scores_repeat = torch.cat(selected_scores, 1)
+    scores_frequent = torch.cat(selected_scores, 1)
     # random select from  top_k * times
-    sample_weight = torch.ones(scores_repeat.shape[0], scores_repeat.shape[1])
+    sample_weight = torch.ones(scores_frequent.shape[0], scores_frequent.shape[1])
     sample_index = torch.multinomial(sample_weight, num_neg)
-    scores_repeat = scores_repeat[torch.arange(0, scores_repeat.shape[0]).unsqueeze(1), sample_index]
-    selected_feature = scores_repeat.reshape(scores_repeat.shape[0] * scores_repeat.shape[1], scores_repeat.shape[2])
+    scores_frequent = scores_frequent[torch.arange(0, scores_frequent.shape[0]).unsqueeze(1), sample_index]
+    selected_feature = scores_frequent.reshape(scores_frequent.shape[0] * scores_frequent.shape[1], scores_frequent.shape[2])
     return selected_feature

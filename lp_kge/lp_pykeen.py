@@ -210,9 +210,7 @@ def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k
             filter_col=targets[index],
         )
         scores = filter_scores_(scores=dev_predictions[index], filter_batch=positive_filter)
-        # random pick top_k negs, if no more than top_k, then fill with -999.
-        # However the top_k from different model is not always the same
-        # Our solution is that we pick the top_k * 2 candidates, and pick the most frequent index
+        # pick top_k negs, if no more than top_k, then fill with -999.
         select_range = top_k if top_k < scores.shape[-1] else scores.shape[-1]
         scores_k, indices_k = torch.nan_to_num(scores, nan=-999.).topk(k=select_range)
         # remove -999 from scores_k

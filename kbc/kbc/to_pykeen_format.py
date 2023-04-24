@@ -92,9 +92,9 @@ def train_and_pred(args):
     to_fusion_eval_format_and_save_topk(pykeen_dataset.validation.mapped_triples, dev_scores.clone(), all_pos_triples, args.out_dir, top_k=100)
     per_rel_eval(pykeen_dataset.validation.mapped_triples, dev_scores, args.out_dir)
     per_mapping_eval(pykeen_dataset, dev_scores, args.out_dir)
-#
 
-def to_fusion_eval_format_and_save_topk(mapped_triples, pred_scores, all_pos_triples, out_dir, top_k=10):
+
+def to_fusion_eval_format_and_save_topk(mapped_triples, pred_scores, all_pos_triples, out_dir, top_k):
     m_dev_preds = torch.chunk(pred_scores, 2, 1)
     pos_scores = m_dev_preds[0]
     pos_scores = pos_scores[torch.arange(0, mapped_triples.shape[0]),
