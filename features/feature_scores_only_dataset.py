@@ -12,16 +12,20 @@ from common_utils import chart_input
 class ScoresOnlyDataset(FusionDataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
-    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
+    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4, models=[]):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
-        self.dim = len(context_resource['models'])
+        if len(models) == 0:
+            self.models = models
+        else:
+            self.models = context_resource['models']
+        self.dim = len(self.models)
 
     def generate_training_input_feature(self):
         #   [m1_score, m2_score, ... ]
         scores_neg = []
         scores_pos = []
         neg_index_topk_times = []
-        for m in self.context_resource['models']:
+        for m in self.models:
             m_context = self.context_resource[m]
             # get pos scores
             m_pos_scores = m_context['eval_pos_scores']
@@ -46,7 +50,7 @@ class ScoresOnlyDataset(FusionDataset):
         # s1,s2,...
         head_scores = []
         tail_scores = []
-        for m in self.context_resource['models']:
+        for m in self.models:
             m_context = self.context_resource[m]
             m_preds = m_context['preds']
             m_h_preds, m_t_preds = torch.chunk(m_preds, 2, 1)

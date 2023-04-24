@@ -102,9 +102,10 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
         tmp_topk = torch.clone(topk_idx)
         # add one extra column to handle the -999.0/-1 mask values. the masked values are not selected.
         tmp_topk[tmp_topk == -1] = max_index + 1
+        # restore scores to entity id order, the max x dim is the number of candidate entities
         scattered_scores = torch.zeros([tmp_topk.shape[0], tmp_topk.shape[1], max_index + 2]).scatter_(2, tmp_topk, tmp_scores) # sigmoid scores to [0-1]
         # target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
-        target_neg_scores = scattered_scores.transpose(0, 1).transpose(1, 2)
+        scattered_target_neg_scores = scattered_scores.transpose(0, 1).transpose(1, 2)
         # count top_k frequent index
         backup_shape = topk_idx.shape
         topk_idx = topk_idx.transpose(0, 1).reshape([backup_shape[1], backup_shape[0]*backup_shape[2]])
@@ -114,8 +115,8 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
         # for rows that less than num_neg, we randomly duplicate existing index
         idx_df = idx_df.apply(lambda x: padding_sampling(x, num_neg))
         tmp_topk_idx = list(idx_df.values)
-        fill_topk = torch.as_tensor(tmp_topk_idx)
-        target_neg_scores = target_neg_scores[torch.arange(0, target_neg_scores.shape[0]).unsqueeze(1), fill_topk]
+        padded_topk = torch.as_tensor(tmp_topk_idx)
+        target_neg_scores = scattered_target_neg_scores[torch.arange(0, scattered_target_neg_scores.shape[0]).unsqueeze(1), padded_topk]
         selected_scores.append(target_neg_scores)
 
     scores_frequent = torch.cat(selected_scores, 1)
