@@ -14,7 +14,7 @@ class ScoresOnlyDataset(FusionDataset):
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
     def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4, models=[]):
         super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
-        if len(models) == 0:
+        if len(models) > 0:
             self.models = models
         else:
             self.models = context_resource['models']
