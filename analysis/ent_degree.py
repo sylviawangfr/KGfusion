@@ -94,7 +94,7 @@ def find_domain_range_class(dataset):
 #                                           )
 #         self.all_pos_triples = get_all_pos_triples(self.dataset)
 #
-#     def make_triple_partition_per_degree(self, mapped_triples, target2degrees2entids):
+#     def make_triple_partition_per_degree_partition(self, mapped_triples, target2degrees2entids):
 #         tri_df = pd.DataFrame(data=mapped_triples, columns=['h', 'r', 't'])
 #         query_strs = ["h in @ent_ids", "t in @ent_ids", "h in @ent_ids or t in @ent_ids"]
 #         target2tri_idx = dict()
@@ -222,12 +222,12 @@ def find_domain_range_class(dataset):
 #         all_tris = torch.cat([self.dataset.testing.mapped_triples,
 #                               self.dataset.validation.mapped_triples,
 #                               self.dataset.training.mapped_triples], 0)
-#         all_target2degrees2trids_per_degree = self.make_triple_partition_per_degree(all_tris, target2degrees2entids)
+#         all_target2degrees2trids_per_degree = self.make_triple_partition_per_degree_partition(all_tris, target2degrees2entids)
 #         all_target2degrees2trids = self.make_triple_partitions(all_tris, target2degrees2entids, all_target2degrees2trids_per_degree)
 #         del all_tris
 #         # self._to_pie_chart(all_target2degrees2trids, 'Dataset')
 #         self._to_degree_distribution_charts(all_target2degrees2trids, "Triple")
-#         test_target2degrees2tri_per = self.make_triple_partition_per_degree(self.dataset.testing.mapped_triples, target2degrees2entids)
+#         test_target2degrees2tri_per = self.make_triple_partition_per_degree_partition(self.dataset.testing.mapped_triples, target2degrees2entids)
 #         test_target2degree2tri = self.make_triple_partitions(self.dataset.testing.mapped_triples, target2degrees2entids, test_target2degrees2tri_per)
 #         # self._to_pie_chart(test_target2degree2tri, 'Test')
 #         self._to_degree_distribution_charts(test_target2degree2tri, "Test")
