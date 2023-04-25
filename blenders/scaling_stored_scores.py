@@ -41,6 +41,7 @@ class PlattScalingIndividual():
         all_pos_triples = get_all_pos_triples(self.dataset)
         models_context = self.context
         for index, model_name in enumerate(self.model_list):
+            logger.info(f"scaling: {model_name}")
             dev_feature_dataset = ScoresOnlyDataset(self.dataset.validation.mapped_triples,
                                                     models_context,
                                                     all_pos_triples,
