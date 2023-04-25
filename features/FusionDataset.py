@@ -111,9 +111,9 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
         topk_idx = topk_idx.transpose(0, 1).reshape([backup_shape[1], backup_shape[0]*backup_shape[2]])
         idx_df = pd.DataFrame(data=topk_idx.numpy().T)
         idx_df = idx_df.groupby(idx_df.columns, axis=1).apply(lambda x: x.values).apply(lambda y:y.flatten())
-        idx_df = idx_df.apply(lambda x: x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(num_neg * 2)])
+        idx_df = idx_df.apply(lambda x: x[x != -1]).apply(lambda x: [a[0] for a in Counter(x).most_common(num_neg * 4)])
         # for rows that less than num_neg, we randomly duplicate existing index
-        idx_df = idx_df.apply(lambda x: padding_sampling(x, num_neg * 2))
+        idx_df = idx_df.apply(lambda x: padding_sampling(x, num_neg * 4))
         tmp_topk_idx = list(idx_df.values)
         padded_topk = torch.as_tensor(tmp_topk_idx)
         target_neg_scores = scattered_target_neg_scores[torch.arange(0, scattered_target_neg_scores.shape[0]).unsqueeze(1), padded_topk]
