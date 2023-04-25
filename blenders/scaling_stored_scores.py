@@ -51,12 +51,11 @@ class PlattScalingIndividual():
             test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples, models=[model_name])
 
             pos, neg = dev_feature_dataset.get_all_dev_examples()
-            if model_name == 'anyburl':
-                keep_index1 = (pos > 0).nonzero(as_tuple=True)[0]
-                neg = neg.reshape(pos.shape[0], self.num_neg)[keep_index1].flatten().unsqueeze(1)
-                pos = pos[keep_index1]
-                keep_index2 = (neg > 0).nonzero(as_tuple=True)[0]
-                neg = neg[keep_index2]
+            keep_index1 = (pos > 0).nonzero(as_tuple=True)[0]
+            neg = neg.reshape(pos.shape[0], self.num_neg)[keep_index1].flatten().unsqueeze(1)
+            pos = pos[keep_index1]
+            keep_index2 = (neg > 0).nonzero(as_tuple=True)[0]
+            neg = neg[keep_index2]
             logger.info(f"pos num: {pos.shape[0]}")
             logger.info(f"neg num: {neg.shape[0]}")
             inputs = torch.cat([pos, neg], 0)
