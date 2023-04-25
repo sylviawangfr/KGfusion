@@ -78,6 +78,7 @@ class PlattScalingIndividual():
 
         for index, m in enumerate(model_features):
             model_name = self.model_list[index]
+            logger.info(f"scaling: {model_name}")
             if self.params.cali == "variational":
                 logger.info("using variational")
                 cali = LogisticCalibration(method='variational',

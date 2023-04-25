@@ -38,6 +38,7 @@ class PlattScalingIndividual():
                                           )
 
     def cali(self):
+        print(self.params.__dict__)
         all_pos_triples = get_all_pos_triples(self.dataset)
         models_context = self.context
         for index, model_name in enumerate(self.model_list):
