@@ -113,13 +113,14 @@ class KBCModel(nn.Module, ABC):
                                 scores[i, torch.LongTensor(filter_in_chunk)] = -1e6
                             else:
                                 scores[i, torch.LongTensor(filter_out)] = -1e6
-                    # rescore true scores
+                    # restore true scores
                     scores[torch.arange(0, these_queries.shape[0]), these_queries[:, 2]] = true_scores
                     sigmoid_scores = torch.sigmoid(scores)
                     all_scores.append(sigmoid_scores)
                     # all_scores.append(scores)
                     b_begin += batch_size
                 c_begin += chunk_size
+
         return torch.cat(all_scores, 0)
 
 

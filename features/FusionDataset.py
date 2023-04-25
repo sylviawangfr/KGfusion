@@ -103,7 +103,7 @@ def get_multi_model_neg_topk(neg_score_ht, neg_index_topk, num_neg):
         # add one extra column to handle the -999.0/-1 mask values. the masked values are not selected.
         tmp_topk[tmp_topk == -1] = max_index + 1
         # restore scores to entity id order, the max x dim is the number of candidate entities
-        scattered_scores = torch.zeros([tmp_topk.shape[0], tmp_topk.shape[1], max_index + 2]).scatter_(2, tmp_topk, tmp_scores) # sigmoid scores to [0-1]
+        scattered_scores = torch.zeros([tmp_topk.shape[0], tmp_topk.shape[1], max_index + 2]).scatter_(2, tmp_topk, tmp_scores) # sigmoid scores [0-1]
         # target_neg_scores = neg_scores[target].squeeze().transpose(0,1).transpose(1,2)
         scattered_target_neg_scores = scattered_scores.transpose(0, 1).transpose(1, 2)
         # count top_k frequent index
