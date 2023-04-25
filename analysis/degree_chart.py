@@ -243,7 +243,7 @@ class EntDegreeChart(AnalysisChart):
         all_tris = torch.cat([self.dataset.testing.mapped_triples,
                               self.dataset.validation.mapped_triples,
                               self.dataset.training.mapped_triples], 0)
-        target2partition2trids = self.make_triple_partition_per_degree_partition(all_tris, target2degrees2entids)
+        target2partition2trids = self.make_triple_partition_per_degree_partition(all_tris, target2partition2entids)
         del all_tris
         self._to_degree_distribution_charts(target2partition2trids, "Triple")
         test_target2partition2tri = self.make_triple_partition_per_degree_partition(self.dataset.testing.mapped_triples, target2partition2entids)
