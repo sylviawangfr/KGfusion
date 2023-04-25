@@ -102,7 +102,7 @@ class RelMappingChart(AnalysisChart):
         labels = key2tri_ids.keys()
         values = [len(key2tri_ids[t]) for t in key2tri_ids]
         fig, ax = plt.subplots()
-        ax.pie(values, labels=labels, autopct='%1.1f%%')
+        ax.pie(values, labels=labels, autopct='%1.1f%%', colors=['olivedrab', 'rosybrown', 'gray', 'saddlebrown'])
         ax.set_title(f"{title_keyword} Partitions on Relation Mappings")
         plt.savefig(self.params.work_dir + f'figs/{title_keyword}_rel_mapping_pie.png', dpi=600)
 

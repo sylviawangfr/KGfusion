@@ -12,7 +12,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_p', type=int, default=10)
     args = parser.parse_args()
     args.models = args.models.split('_')
-    jobs = [EntDegreeChart, RelMappingChart]
+    # jobs = [EntDegreeChart, RelMappingChart]
+    jobs = [RelMappingChart]
     for j in jobs:
         tmp_job = j(args)
         tmp_job.analyze()
