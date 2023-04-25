@@ -81,6 +81,7 @@ class PlattScalingIndividual():
                                            detection=True,
                                            independent_probabilities=True,
                                            momentum_epochs=500,
+                                           use_cuda=use_cuda,
                                            vi_epochs=500)
             else:
                 logger.info("unsupported cali function, please set cali in ['variational', 'isotonic', 'momentum']")
