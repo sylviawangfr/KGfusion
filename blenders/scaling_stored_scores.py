@@ -71,7 +71,7 @@ class PlattScalingIndividual():
                                            detection=True,
                                            independent_probabilities=True,
                                            use_cuda=use_cuda,
-                                           vi_epochs=500)
+                                           vi_epochs=self.params.epoch)
             elif self.params.cali == 'isotonic':
                 logger.info("using isotonic")
                 cali = IsotonicRegression(detection=True, independent_probabilities=True)
@@ -82,7 +82,7 @@ class PlattScalingIndividual():
                                            independent_probabilities=True,
                                            momentum_epochs=500,
                                            use_cuda=use_cuda,
-                                           vi_epochs=500)
+                                           vi_epochs=self.params.epoch)
             else:
                 logger.info("unsupported cali function, please set cali in ['variational', 'isotonic', 'momentum']")
                 sys.exit()
@@ -148,6 +148,7 @@ if __name__ == '__main__':
     parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="variational")
+    parser.add_argument('--epoch', type=int, default=100)
     args = parser.parse_args()
     args.models = args.models.split('_')
     wab = PlattScalingIndividual(args)
