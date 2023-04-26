@@ -5,8 +5,9 @@ import torch
 from tabulate import tabulate
 import common_utils
 from analysis.group_eval_utils import group_rank_eval, AnalysisChart
-from lp_kge.lp_pykeen import find_relation_mappings
 import matplotlib.pyplot as plt
+
+from blenders.blender_utils import find_relation_mappings
 
 
 class RelChart(AnalysisChart):
@@ -40,8 +41,7 @@ class RelMappingChart(AnalysisChart):
         super().__init__(params)
         self.mappings = ['1-1', '1-n', 'n-1', 'n-m']
 
-    def make_partitions(self, mapped_triples):
-        rel_mappings = find_relation_mappings(self.dataset)
+    def make_partitions(self, mapped_triples, rel_mappings):
         triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'], )
         key2tri_ids = dict()
         for key in self.mappings:
@@ -135,7 +135,8 @@ class RelMappingChart(AnalysisChart):
         all_tris = torch.cat([self.dataset.testing.mapped_triples,
                               self.dataset.validation.mapped_triples,
                               self.dataset.training.mapped_triples], 0)
-        all_key2tri_ids = self.make_partitions(all_tris)
+        rel_mappings = find_relation_mappings(self.dataset)
+        all_key2tri_ids = self.make_partitions(all_tris, rel_mappings)
         del all_tris
         self._to_pie_chart(all_key2tri_ids, "Dataset")
         key2tri_ids = self.make_partitions(self.dataset.testing.mapped_triples)

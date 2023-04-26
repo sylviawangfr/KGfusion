@@ -7,7 +7,8 @@ from context_load_and_run import load_score_context
 from features.feature_per_rel_both_dataset import PerRelBothDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
-from blender_utils import Blender, get_features_clz
+from blenders.blender_base import Blender, get_features_clz
+
 if torch.cuda.is_available():
     import cuml as sk
     from cuml.svm import SVC

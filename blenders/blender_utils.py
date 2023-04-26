@@ -1,60 +1,20 @@
-import logging
 from typing import Optional
+import pandas as pd
+import pykeen
 from pykeen.constants import TARGET_TO_INDEX
 from pykeen.evaluation import RankBasedEvaluator
 from pykeen.evaluation.evaluator import Evaluator, filter_scores_
 from pykeen.evaluation.evaluator import create_sparse_positive_filter_, create_dense_positive_mask_
-from pykeen.typing import MappedTriples, Target, LABEL_HEAD, LABEL_TAIL
+from pykeen.typing import MappedTriples, Target, LABEL_HEAD, LABEL_TAIL, COLUMN_HEAD, COLUMN_TAIL
+from pykeen.utils import prepare_filter_triples
 from torch import FloatTensor
 import torch
 import common_utils
-from features.feature_per_ent_dataset import PerEntDataset
-from features.feature_per_model_both_dataset import PerModelBothDataset
-from features.feature_per_rel_both_dataset import PerRelBothDataset
-from features.feature_per_rel_ht_dataset import PerRelDataset
-from features.feature_per_rel_ent_dataset import PerRelEntDataset
-from features.feature_scores_only_dataset import ScoresOnlyDataset
-from abc import ABC, abstractmethod
 from pykeen.datasets import get_dataset
-
-from lp_kge.lp_pykeen import get_all_pos_triples
-
-
-class Blender(ABC):
-    def __init__(self, params, logger):
-        self.dataset = get_dataset(
-            dataset=params.dataset
-        )
-        self.params = params
-        self.log_dir = self.params.work_dir + "logs/"
-        self.logger = logger
-        common_utils.init_dir(self.log_dir)
-        logger.addHandler(logging.StreamHandler())
-        logger.setLevel(logging.DEBUG)
+from analysis.group_eval_utils import eval_groups, get_all_pos_triples
 
 
-    @abstractmethod
-    def aggregate_scores(self):
-        pass
-
-    def finalize(self, blended_preds, log_prefix):
-        h_preds, t_preds = torch.chunk(blended_preds, 2, 0)
-        # restore format that required by pykeen evaluator
-        candidate_number = self.dataset.num_entities
-        h_preds = torch.reshape(h_preds, (self.dataset.testing.num_triples, candidate_number))
-        t_preds = torch.reshape(t_preds, (self.dataset.testing.num_triples, candidate_number))
-        ht_scores = torch.cat([h_preds, t_preds], 1)
-        save_dir = self.params.work_dir + '_'.join(self.params.models) + '/'
-        common_utils.init_dir(save_dir)
-        file_name = save_dir + f"{log_prefix}.pt"
-        torch.save(ht_scores, file_name)
-        self.logger.info(f"Transforming saved at {file_name}")
-        str_re = test_pred(self.dataset, ht_scores)
-        common_utils.save_to_file(str_re, self.log_dir + log_prefix + '.log')
-        self.logger.info(f"{log_prefix}:\n{str_re}")
-
-
-def eval_with_blender_scores(
+def evaluate_target(
         batch: MappedTriples,
         scores: FloatTensor,
         target: Target,
@@ -129,13 +89,13 @@ def eval_with_blender_scores(
     return relation_filter
 
 
-def test_pred(dataset, pred_scores_ht):
+def evaluate_testing_scores(dataset, pred_scores_in_pykeen_format):
     all_pos = get_all_pos_triples(dataset)
-    ht_scores = torch.chunk(pred_scores_ht, 2, 1)
+    ht_scores = torch.chunk(pred_scores_in_pykeen_format, 2, 1)
     evaluator = RankBasedEvaluator()
     relation_filter = None
     for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-        relation_filter = eval_with_blender_scores(
+        relation_filter = evaluate_target(
             batch=dataset.testing.mapped_triples,
             scores=ht_scores[ind],
             target=target,
@@ -148,16 +108,89 @@ def test_pred(dataset, pred_scores_ht):
     return str_re
 
 
+# def per_rel_eval(mapped_triples, scores, out_dir):
+#     triples_df = pd.DataFrame(data=mapped_triples.numpy(), columns=['h', 'r', 't'])
+#     original_groups = triples_df.groupby('r', group_keys=True, as_index=False)
+#     group_keys = original_groups.groups.keys()
+#     file_name = "rank_rel_eval.pt"
+#     head_tail_eval = []
+#     for rel in group_keys:
+#         # generate grouped index of eval mapped triples
+#         g = original_groups.get_group(rel)
+#         g_index = torch.from_numpy(g.index.values)
+#         rg_index = torch.as_tensor(g_index)
+#         h_preds, t_preds = scores[rg_index].chunk(2, 1)
+#         heads = torch.as_tensor(g['h'].values)
+#         tails = torch.as_tensor(g['t'].values)
+#         head_hits = calc_hit_at_k(h_preds, heads)
+#         tail_hits = calc_hit_at_k(t_preds, tails)
+#         both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+#         head_tail_eval.append(torch.as_tensor([head_hits,
+#                                                tail_hits,
+#                                                both_hit]))
+#     head_tail_eval = torch.stack(head_tail_eval, 0)
+#     torch.save(head_tail_eval, out_dir + file_name)
 
-def get_features_clz(keyword=2):
-    clz = {
-        1: PerRelDataset,
-        2: PerRelBothDataset,
-        3: ScoresOnlyDataset,
-        4: PerEntDataset,
-        5: PerRelEntDataset,
-        6: PerModelBothDataset}
-    return clz[keyword]
+
+# def per_mapping_eval(pykeen_dataset, scores, out_dir):
+#     mappings = ['1-1', '1-n', 'n-1', 'n-m']
+#     rel_mappings = find_relation_mappings(pykeen_dataset)
+#     dev = pykeen_dataset.validation.mapped_triples
+#     triples_df = pd.DataFrame(data=dev.numpy(), columns=['h', 'r', 't'], )
+#     relmapping2idx = dict()
+#     for idx, mapping_type in enumerate(mappings):
+#         mapped_rels = rel_mappings[mapping_type]
+#         relmapping2idx.update({int(rel): idx for rel in mapped_rels})
+#     head_tail_eval = []
+#     for rel_group in mappings:
+#         tmp_rels = rel_mappings[rel_group]
+#         tri_group = triples_df.query('r in @tmp_rels')
+#         if len(tri_group.index) > 0:
+#             g = torch.from_numpy(tri_group.values)
+#             g_index = torch.from_numpy(tri_group.index.values)
+#             rg_index = torch.as_tensor(g_index)
+#             h_preds, t_preds = scores[rg_index].chunk(2, 1)
+#             heads = g[:, 0]
+#             tails = g[:, 2]
+#             head_hits = calc_hit_at_k(h_preds, heads)
+#             tail_hits = calc_hit_at_k(t_preds, tails)
+#             both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+#             head_tail_eval.append(torch.as_tensor([head_hits,
+#                                                    tail_hits,
+#                                                    both_hit]))
+#         else:
+#             head_tail_eval.append(torch.full([3, 4], 0.001))
+#     torch.save(torch.stack(head_tail_eval, 0), out_dir + f"rank_mapping_rel_eval.pt")
+    # if not common_utils.does_exist(out_dir + f"rank_mapping_releval2idx.json"):
+    #     common_utils.save2json(relmapping2idx, out_dir + f"rank_mapping_releval2idx.json")
+
+
+#
+# def per_mapping_eval(dataset, pred_scores, out_dir):
+#     mappings = ['1-1', '1-n', 'n-1', 'n-m']
+#     rel_mappings = find_relation_mappings(dataset)
+#     tri_df = pd.DataFrame(data=dataset.validation.mapped_triples.numpy(), columns=['h', 'r', 't'])
+#     head_tail_mrr = []
+#     for rel_group in mappings:
+#         tmp_rels = rel_mappings[rel_group]
+#         rg_tris = tri_df.query('r in @tmp_rels')
+#         if len(rg_tris.index) > 0:
+#             rg_index = torch.as_tensor(rg_tris.index)
+#             h_preds, t_preds = pred_scores[rg_index].chunk(2, 1)
+#             heads = torch.as_tensor(rg_tris['h'].values)
+#             tails = torch.as_tensor(rg_tris['t'].values)
+#             head_hits = calc_hit_at_k(h_preds, heads)
+#             tail_hits = calc_hit_at_k(t_preds, tails)
+#             both_hit = calc_hit_at_k(torch.cat([h_preds, t_preds]), torch.cat((heads, tails)))
+#             head_tail_mrr.append(torch.as_tensor([head_hits,
+#                                                   tail_hits,
+#                                                   both_hit]))
+#         else:
+#             head_tail_mrr.append(torch.full([3, 4], 0.001))
+#     head_tail_mrr = torch.stack(head_tail_mrr, 0)
+#     torch.save(head_tail_mrr, out_dir + "rank_mapping_rel_eval.pt")
+
+
 
 
 

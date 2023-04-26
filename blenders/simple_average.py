@@ -7,7 +7,8 @@ from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from pykeen.utils import resolve_device
 
 import common_utils
-from blenders.blender_utils import eval_with_blender_scores, Blender, test_pred
+from blenders.blender_utils import evaluate_target, evaluate_testing_scores
+from blenders.blender_base import Blender
 from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset

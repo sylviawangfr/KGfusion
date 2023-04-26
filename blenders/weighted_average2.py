@@ -1,7 +1,7 @@
 import argparse
 import logging
 import torch
-from blenders.blender_utils import Blender
+from blenders.blender_base import Blender
 from context_load_and_run import load_score_context
 from features.feature_per_rel_ent_dataset import PerRelEntDataset
 from lp_kge.lp_pykeen import get_all_pos_triples

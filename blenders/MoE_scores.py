@@ -1,7 +1,7 @@
 import logging
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from blenders.blender_utils import Blender
+from blenders.blender_base import Blender
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples

@@ -1,7 +1,7 @@
 import argparse
 import logging
 import torch
-from blenders.blender_utils import get_features_clz, Blender
+from blenders.blender_base import Blender, get_features_clz
 from context_load_and_run import load_score_context
 from lp_kge.lp_pykeen import get_all_pos_triples
 
@@ -50,7 +50,7 @@ class WeightedAverageBlender1(Blender):
                      f"{self.params.evaluator_key}" \
                      f"{self.params.eval_feature}_" \
                      f"data{self.params.features}" \
-                     f"_weighted_avg1"
+                     f"_wavg"
         self.finalize(blender_scores, option_str)
 
 

@@ -9,7 +9,7 @@ from tqdm import tqdm
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
-from blender_utils import Blender
+from blenders.blender_base import Blender
 import numpy as np
 
 
@@ -23,7 +23,6 @@ class CalibrationBlender1(Blender):
 
     def aggregate_scores(self):
         all_pos_triples = get_all_pos_triples(self.dataset)
-        work_dir = self.params.work_dir
         models_context = self.context
         dev_feature_dataset = ScoresOnlyDataset(self.dataset.validation.mapped_triples,
                                                 models_context,
@@ -78,16 +77,16 @@ class CalibrationBlender1(Blender):
             if use_cuda:
                 torch.cuda.empty_cache()
 
-        option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_{self.params.cali}"
+        option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_{self.params.cali}_cali"
         ht_blender = torch.as_tensor(individual_cali)
         self.finalize(ht_blender, option_str)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CPComplEx_CP")
+    parser.add_argument('--models', type=str, default="CPComplEx_anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument("--num_neg", type=int, default=4)
+    parser.add_argument("--num_neg", type=int, default=40)
     parser.add_argument("--epoch", type=int, default=500)
     parser.add_argument("--cali", type=str, default="variational")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")

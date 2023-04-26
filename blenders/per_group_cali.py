@@ -13,7 +13,7 @@
 # from context_load_and_run import load_score_context
 # from features.feature_scores_only_dataset import ScoresOnlyDataset
 # from lp_kge.lp_pykeen import get_all_pos_triples, find_relation_mappings
-# from blender_utils import eval_with_blender_scores, Blender
+# from blender_utils import evaluate_target, Blender
 # import numpy as np
 #
 # logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@
 #         evaluator = RankBasedEvaluator()
 #         relation_filter = None
 #         for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-#             relation_filter = eval_with_blender_scores(
+#             relation_filter = evaluate_target(
 #                 batch=reorder_test_tris,
 #                 scores=ht_scores[ind],
 #                 target=target,

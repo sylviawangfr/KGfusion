@@ -4,7 +4,7 @@ import os
 import gc
 import torch.nn.functional as F
 from mlflow.entities import ViewType
-from blenders.blender_utils import get_features_clz, Blender
+from blenders.blender_base import Blender, get_features_clz
 from pykeen.typing import MappedTriples
 from pykeen.utils import resolve_device
 import torch
@@ -239,8 +239,8 @@ class NNLinearBlender(Blender):
 
         option_str = f"{self.dataset.metadata['name']}_" \
                      f"{'_'.join(self.params.models)}_" \
-                     f"feature{self.params.features}_" \
-                     f"nn_{self.params.loss}"
+                     f"data{self.params.features}_" \
+                     f"{self.params.loss}_nn"
         self.finalize(ht_scores, option_str)
 
 
