@@ -4,9 +4,8 @@ import os
 import gc
 import torch.nn.functional as F
 from mlflow.entities import ViewType
-from pykeen.evaluation import RankBasedEvaluator
-from blenders.blender_utils import eval_with_blender_scores, get_features_clz, Blender
-from pykeen.typing import MappedTriples, LABEL_HEAD, LABEL_TAIL
+from blenders.blender_utils import get_features_clz, Blender
+from pykeen.typing import MappedTriples
 from pykeen.utils import resolve_device
 import torch
 import torch.nn as nn
@@ -14,7 +13,6 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from mlflow import log_param
 import mlflow.pytorch
-from common_utils import format_result, save_to_file
 from context_load_and_run import load_score_context
 from lp_kge.lp_pykeen import get_all_pos_triples
 
@@ -201,33 +199,19 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
     for i, batch in enumerate(test_dataloader):
         ens_logits = model(batch.to(device))
-        ht_preds = torch.chunk(ens_logits.cpu(), 2, 0)
+        ht_preds = torch.chunk(ens_logits, 2, 0)
         h_preds.append(ht_preds[0])
         t_preds.append(ht_preds[1])
     # restore format that required by pykeen evaluator
     h_preds = torch.cat(h_preds, 0)
     t_preds = torch.cat(t_preds, 0)
-    candidate_number = para.dataset.num_entities
-    ht_scores = [h_preds.reshape([para.dataset.testing.num_triples, candidate_number]),
-                 t_preds.reshape([para.dataset.testing.num_triples, candidate_number])]
-    evaluator = RankBasedEvaluator()
-    relation_filter = None
-    for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-        relation_filter = eval_with_blender_scores(
-            batch=mapped_triples,
-            scores=ht_scores[ind],
-            target=target,
-            evaluator=evaluator,
-            all_pos_triples=all_pos_triples,
-            relation_filter=relation_filter,
-        )
-    result = evaluator.finalize()
-    return result
+    ht_preds = torch.cat([h_preds, t_preds], 0)
+    return ht_preds.detach().cpu()
 
 
 class NNLinearBlender(Blender):
-    def __init__(self, params):
-        super().__init__(params)
+    def __init__(self, params, logger):
+        super().__init__(params, logger)
         self.context = load_score_context(params.models,
                                           in_dir=params.work_dir,
                                           calibration=True,
@@ -251,16 +235,13 @@ class NNLinearBlender(Blender):
         all_pos = get_all_pos_triples(self.dataset)
         mo = train_aggregation_model(self.dataset.validation.mapped_triples, context, all_pos, self.params)
         # 3. aggregate scores for testing
-        result = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
-        str_re = format_result(result)
+        ht_scores = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
+
         option_str = f"{self.dataset.metadata['name']}_" \
                      f"{'_'.join(self.params.models)}_" \
                      f"feature{self.params.features}_" \
                      f"nn_{self.params.loss}"
-        save_to_file(str_re, self.log_dir + f"{option_str}.log")
-        print(f"{option_str}:\n{str_re}")
-        if self.params.mlflow:
-            mlflow.log_param('result', str_re)
+        self.finalize(ht_scores, option_str)
 
 
 if __name__ == '__main__':
@@ -290,5 +271,5 @@ if __name__ == '__main__':
     if args.mlflow == 'True':
         args.mlflow = True
     args.models = args.models.split('_')
-    nnb = NNLinearBlender(args)
+    nnb = NNLinearBlender(args, logging.getLogger(__name__))
     nnb.aggregate_scores()

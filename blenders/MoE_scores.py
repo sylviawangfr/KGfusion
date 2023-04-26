@@ -1,9 +1,7 @@
-from pykeen.evaluation import RankBasedEvaluator
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL
+import logging
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from blenders.blender_utils import eval_with_blender_scores, Blender
-from common_utils import format_result, save_to_file
+from blenders.blender_utils import Blender
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
@@ -123,8 +121,8 @@ def get_moe_params(params):
 
 
 class MOEBlender(Blender):
-    def __init__(self, params):
-        super().__init__(params)
+    def __init__(self, params, logger):
+        super().__init__(params, logger)
         self.context = load_score_context(params.models,
                                           in_dir=params.work_dir,
                                           calibration=True
@@ -152,26 +150,9 @@ class MOEBlender(Blender):
         moe_layer = train_MoE(inputs, labels, moe_params)
         # predict
         h_preds, t_preds = pred_with_MoE(pred_features, moe_layer)
-        # restore format that required by pykeen evaluator
-        candidate_number = self.dataset.num_entities
-        ht_scores = [h_preds.reshape([self.dataset.testing.num_triples, candidate_number]),
-                     t_preds.reshape([self.dataset.testing.num_triples, candidate_number])]
-        evaluator = RankBasedEvaluator()
-        relation_filter = None
-        for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = eval_with_blender_scores(
-                batch=test_feature_dataset.mapped_triples,
-                scores=ht_scores[ind],
-                target=target,
-                evaluator=evaluator,
-                all_pos_triples=all_pos_triples,
-                relation_filter=relation_filter,
-            )
-        result = evaluator.finalize()
-        str_re = format_result(result)
+        ht_blender = torch.concat([h_preds, t_preds], 0)
         option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_MoE"
-        save_to_file(str_re, self.log_dir + f"{option_str}.log")
-        print(f"{option_str}:\n{str_re}")
+        self.finalize(ht_blender, option_str)
 
 
 if __name__ == '__main__':
@@ -182,5 +163,5 @@ if __name__ == '__main__':
     parser.add_argument('--num_neg', type=int, default=4)
     args = parser.parse_args()
     args.models = args.models.split('_')
-    wab = MOEBlender(args)
+    wab = MOEBlender(args, logging.getLogger(__name__))
     wab.aggregate_scores()

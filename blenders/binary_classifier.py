@@ -1,16 +1,13 @@
 import argparse
 import logging
 import torch
-from pykeen.evaluation import RankBasedEvaluator
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from context_load_and_run import load_score_context
 from features.feature_per_rel_both_dataset import PerRelBothDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
-from blender_utils import eval_with_blender_scores, Blender, get_features_clz
-from common_utils import format_result, save_to_file
+from blender_utils import Blender, get_features_clz
 if torch.cuda.is_available():
     import cuml as sk
     from cuml.svm import SVC
@@ -21,11 +18,9 @@ else:
     from sklearn.neural_network import MLPClassifier
 
 
-logger = logging.getLogger(__name__)
-
 names = [
     # "Nearest Neighbors",
-    "Linear SVM",
+    "LinearSVM",
     # "RBF SVM",
     # "Gaussian Process",
     # "DecisionTree",
@@ -51,18 +46,17 @@ classifiers = [
 
 
 class BinaryClassifier(Blender):
-    def __init__(self, params):
-        super().__init__(params)
+    def __init__(self, params, logger):
+        super().__init__(params, logger)
         self.context = load_score_context(params.models,
                                           in_dir=params.work_dir,
-                                          calibration=False,
+                                          calibration=True,
                                           evaluator_key='rank',
                                           eval_feature=params.eval_feature,
                                           )
 
     def aggregate_scores(self):
         all_pos_triples = get_all_pos_triples(self.dataset)
-        work_dir = self.params.work_dir
         models_context = self.context
 
         get_features = get_features_clz(self.params.features)
@@ -91,41 +85,17 @@ class BinaryClassifier(Blender):
         inputs = torch.cat([pos, neg], 0).numpy()
         labels = torch.cat([torch.ones(pos.shape[0]),
                             torch.zeros(neg.shape[0])], 0).numpy()
-        # rate = pos.shape[0] / neg.shape[0]
-        # weights = torch.cat([torch.ones(pos.shape[0]),
-        #                      torch.full([neg.shape[0]], rate)]).numpy()
-
         for name, clf in zip(names, classifiers):
-            # if name in ["AdaBoost", "NaiveBayes"]:
-            #     clf.fit(inputs, labels, weights)
-            # else:
             clf.fit(inputs, labels)
             test_dataloader = DataLoader(pred_features.numpy(), batch_size=1000)
             individual_scores = []
             for batch in tqdm(test_dataloader):
                 batch_scores = clf.predict_proba(batch.numpy())
                 individual_scores.extend(batch_scores[:, 1])
-            h_preds, t_preds = torch.chunk(torch.as_tensor(individual_scores), 2, 0)
-            # restore format that required by pykeen evaluator
-            candidate_number = self.dataset.num_entities
-            ht_scores = [h_preds.reshape([self.dataset.testing.num_triples, candidate_number]),
-                         t_preds.reshape([self.dataset.testing.num_triples, candidate_number])]
-            evaluator = RankBasedEvaluator()
-            relation_filter = None
-            for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-                relation_filter = eval_with_blender_scores(
-                    batch=self.dataset.testing.mapped_triples,
-                    scores=ht_scores[ind],
-                    target=target,
-                    evaluator=evaluator,
-                    all_pos_triples=all_pos_triples,
-                    relation_filter=relation_filter,
-                )
-            result = evaluator.finalize()
-            str_re = format_result(result)
+
+            ht_blender = torch.as_tensor(individual_scores)
             option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_{name}"
-            save_to_file(str_re, self.log_dir + f"{option_str}.log")
-            print(f"{option_str}:\n{str_re}")
+            self.finalize(ht_blender, option_str)
 
 
 if __name__ == '__main__':
@@ -141,5 +111,5 @@ if __name__ == '__main__':
     parser.add_argument('--features', type=int, default=3)  # 1, 2, 4, 6
     args = parser.parse_args()
     args.models = args.models.split('_')
-    wab = BinaryClassifier(args)
+    wab = BinaryClassifier(args, logging.getLogger(__name__))
     wab.aggregate_scores()

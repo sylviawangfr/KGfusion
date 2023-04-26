@@ -1,11 +1,12 @@
 import argparse
+import logging
 import torch
-from pykeen.evaluation import RankBasedEvaluator
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL
-from blenders.blender_utils import eval_with_blender_scores, get_features_clz, Blender
-from common_utils import format_result, save_to_file
+from blenders.blender_utils import get_features_clz, Blender
 from context_load_and_run import load_score_context
 from lp_kge.lp_pykeen import get_all_pos_triples
+
+
+logger = logging.getLogger(__name__)
 
 
 def weighted_mean(t1, weights):
@@ -28,8 +29,8 @@ def weighted_harmonic_mean(t1, weights):
 
 
 class WeightedAverageBlender1(Blender):
-    def __init__(self, params):
-        super().__init__(params)
+    def __init__(self, params, logger):
+        super().__init__(params, logger)
         self.context = load_score_context(self.params.models,
                                           in_dir=params.work_dir,
                                           evaluator_key=params.evaluator_key,
@@ -38,39 +39,19 @@ class WeightedAverageBlender1(Blender):
                                           )
 
     def aggregate_scores(self):
-        work_dir = self.params.work_dir
         mapped_triples = self.dataset.testing.mapped_triples
         all_pos = get_all_pos_triples(self.dataset)
         get_features = get_features_clz(self.params.features)
         test_data_feature = get_features(mapped_triples, self.context, all_pos)
         eval_feature, score_feature = torch.chunk(test_data_feature.get_all_test_examples(), 2, 1)
-        blender = weighted_mean(score_feature, eval_feature)
-        h_preds, t_preds = torch.chunk(blender, 2, 0)
-        # restore format that required by pykeen evaluator
-        candidate_number = self.dataset.num_entities
-        ht_scores = [h_preds.reshape([self.dataset.testing.num_triples, candidate_number]),
-                     t_preds.reshape([self.dataset.testing.num_triples, candidate_number])]
-        evaluator = RankBasedEvaluator()
-        relation_filter = None
-        for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = eval_with_blender_scores(
-                batch=self.dataset.testing.mapped_triples,
-                scores=ht_scores[ind],
-                target=target,
-                evaluator=evaluator,
-                all_pos_triples=all_pos,
-                relation_filter=relation_filter,
-            )
-        result = evaluator.finalize()
-        str_re = format_result(result)
+        blender_scores = weighted_mean(score_feature, eval_feature)
+
         option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_" \
                      f"{self.params.evaluator_key}" \
                      f"{self.params.eval_feature}_" \
                      f"data{self.params.features}" \
                      f"_weighted_avg1"
-        save_to_file(str_re, self.log_dir + f"{option_str}.log")
-        print(f"{option_str}:\n{str_re}")
-        return result
+        self.finalize(blender_scores, option_str)
 
 
 if __name__ == '__main__':
@@ -89,5 +70,5 @@ if __name__ == '__main__':
     parser.add_argument('--features', type=int, default=1)  # 1, 2, 4, 6
     args = parser.parse_args()
     args.models = args.models.split('_')
-    wab = WeightedAverageBlender1(args)
+    wab = WeightedAverageBlender1(args, logging.getLogger(__name__))
     wab.aggregate_scores()

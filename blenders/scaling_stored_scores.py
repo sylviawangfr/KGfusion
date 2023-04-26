@@ -2,18 +2,12 @@ import argparse
 import gc
 import logging
 import sys
-
 import torch
 from netcal.binning import IsotonicRegression
-from netcal.scaling import LogisticCalibration, TemperatureScaling
+from netcal.scaling import LogisticCalibration
 from pykeen.datasets import get_dataset
-from pykeen.evaluation import RankBasedEvaluator
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from blenders.blender_utils import eval_with_blender_scores
-from common_utils import format_result
 from context_load_and_run import load_score_context
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
@@ -74,7 +68,7 @@ class PlattScalingIndividual():
                                            vi_epochs=self.params.epoch)
             elif self.params.cali == 'isotonic':
                 logger.info("using isotonic")
-                cali = IsotonicRegression(detection=True, independent_probabilities=True)
+                cali = IsotonicRegression(independent_probabilities=True)
             elif self.params.cali == 'momentum':
                 logger.info("using momentum")
                 cali = LogisticCalibration(method='momentum',
@@ -110,9 +104,9 @@ class PlattScalingIndividual():
             individual_cali = torch.cat([h_preds, t_preds], 1)
             torch.save(individual_cali, self.work_dir + f"{model_name}/cali_preds.pt")
             logger.info(f"Transforming saved for {self.model_list[index]}.")
-            raw_res = self.test_pred(self.context[model_name]['preds'])
+            raw_res = test_pred(self.dataset, self.context[model_name]['preds'])
             logger.info(f"{self.model_list[index]} rank evaluation with raw scores:\n {raw_res}")
-            cali_res = self.test_pred(individual_cali)
+            cali_res = test_pred(self.dataset, individual_cali)
             logger.info(f"{self.model_list[index]} rank evaluation with calibrated scores:\n {cali_res}")
             del cali
             del h_preds
@@ -121,24 +115,6 @@ class PlattScalingIndividual():
             gc.collect()
             if use_cuda:
                 torch.cuda.empty_cache()
-
-    def test_pred(self, pred_scores_ht):
-        all_pos = get_all_pos_triples(self.dataset)
-        ht_scores = torch.chunk(pred_scores_ht, 2, 1)
-        evaluator = RankBasedEvaluator()
-        relation_filter = None
-        for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = eval_with_blender_scores(
-                batch=self.dataset.testing.mapped_triples,
-                scores=ht_scores[ind],
-                target=target,
-                evaluator=evaluator,
-                all_pos_triples=all_pos,
-                relation_filter=relation_filter,
-            )
-        result = evaluator.finalize()
-        str_re = format_result(result)
-        return str_re
 
 
 if __name__ == '__main__':
