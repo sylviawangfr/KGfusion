@@ -210,7 +210,7 @@ def clean_anyburl(work_dir):
 class LpAnyBURL:
     def __init__(self, params):
         self.dataset = get_dataset(dataset=params.dataset)
-        self.work_dir = params.work_dir
+        self.work_dir = params.work_dir + 'anyburl/'
         self.snapshot = params.snapshot
         self.top_k = params.top_k
 
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--snapshot', type=int, default=100)
     parser.add_argument('--top_k', type=int, default=100)
-    parser.add_argument('--work_dir', type=str, default="../outputs/umls/anyburl/")
+    parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     lp = LpAnyBURL(args)
     lp.train_and_pred()

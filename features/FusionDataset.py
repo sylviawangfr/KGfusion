@@ -8,11 +8,11 @@ from collections import Counter
 
 
 class FusionDataset(Dataset, ABC):
-    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
+    def __init__(self, mapped_triples: MappedTriples, context_loader, all_pos_triples, num_neg=4):
         self.mapped_triples = mapped_triples
         self.num_triples = mapped_triples.shape[0]
         self.triple_index = list(range(mapped_triples.shape[0]))
-        self.context_resource = context_resource
+        self.context_loader = context_loader
         self.all_pos_triples = all_pos_triples
         self.num_neg = num_neg
         self._train_pos = None

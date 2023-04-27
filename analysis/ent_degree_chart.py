@@ -3,13 +3,10 @@ from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import torch
-from pykeen.datasets import get_dataset
 from tabulate import tabulate
 from itertools import chain
 import common_utils
 from analysis.group_eval_utils import group_rank_eval, AnalysisChart
-from context_load_and_run import load_score_context
-from lp_kge.lp_pykeen import get_all_pos_triples
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
@@ -84,23 +81,31 @@ def cut_tail_and_split(degree2ids, num_patt):
     return slots
 
 
+def make_entity_partitions(self, target2degrees2entids):
+    target2p2ids = dict()
+    for i, (target, degree2ent_ids) in enumerate(target2degrees2entids.items()):
+        x_slots = cut_tail_and_split(degree2ent_ids, self.params.num_p)
+        group2entids = dict()
+        for slot_degrees in x_slots:
+            slot_entids = [degree2ent_ids[d] for d in slot_degrees if d in degree2ent_ids]
+            ent_ids = list(chain.from_iterable(slot_entids))
+            slot_key = f"{slot_degrees[0]}-{slot_degrees[-1]}"
+            group2entids.update({slot_key: ent_ids})
+        target2p2ids.update({target: group2entids})
+    return target2p2ids
+
+
 class EntDegreeChart(AnalysisChart):
     def __init__(self, params):
-        self.params = params
-        self.dataset = get_dataset(
-            dataset=params.dataset
-        )
-        self.context = load_score_context(self.params.models,
-                                          in_dir=self.params.work_dir,
-                                          calibration=self.params.cali == 'True'
-                                          )
-        self.all_pos_triples = get_all_pos_triples(self.dataset)
+        super().__init__(params)
+        self.target2degrees2entids = find_degree_groups(self.dataset)
+        self.target2partition2entids = make_entity_partitions(self.target2degrees2entids)
 
-    def make_triple_partition_per_degree_partition(self, mapped_triples, target2partition2entids):
+    def make_triple_partitions(self, mapped_triples):
         tri_df = pd.DataFrame(data=mapped_triples, columns=['h', 'r', 't'])
         query_strs = ["h in @ent_ids", "t in @ent_ids", "h in @ent_ids or t in @ent_ids"]
-        target2tri_idx = dict()
-        for i, (target, partition2ent_ids) in enumerate(target2partition2entids.items()):
+        target2p2tri_idx = dict()
+        for i, (target, partition2ent_ids) in enumerate(self.target2partition2entids.items()):
             partition2tri_idx = dict()
             for partition in partition2ent_ids:
                 ent_ids = partition2ent_ids[partition]
@@ -110,8 +115,8 @@ class EntDegreeChart(AnalysisChart):
                     partition2tri_idx.update({partition: g_index})
                 else:
                     partition2tri_idx.update({partition: []})
-            target2tri_idx.update({target: partition2tri_idx})
-        return target2tri_idx
+            target2p2tri_idx.update({target: partition2tri_idx})
+        return target2p2tri_idx
 
     def _padding(self, target2degree2ids):
         padded = {}
@@ -121,52 +126,50 @@ class EntDegreeChart(AnalysisChart):
             padded.update({target: padded_degrees2idx})
         return padded
 
-    def make_entity_partitions(self, target2degrees):
-        target2p2ids = dict()
-        for i, (target, degree2ent_ids) in enumerate(target2degrees.items()):
-            x_slots = cut_tail_and_split(degree2ent_ids, self.params.num_p)
-            group2entids = dict()
-            for slot_degrees in x_slots:
-                slot_entids = [degree2ent_ids[d] for d in slot_degrees if d in degree2ent_ids]
-                ent_ids = list(chain.from_iterable(slot_entids))
-                slot_key = f"{slot_degrees[0]}-{slot_degrees[-1]}"
-                group2entids.update({slot_key: ent_ids})
-            target2p2ids.update({target: group2entids})
-        return target2p2ids
-
-    # def make_triple_partitions(self, mapped_triples, target2degrees, all_target2degree2trids=None):
-    #     # if the degree range is not suitable to draw as x-ticks, we can aggregate them to number of partitions.
-    #     tri_df = pd.DataFrame(data=mapped_triples, columns=['h', 'r', 't'])
-    #     query_strs = ["h in @ent_ids", "t in @ent_ids", "h in @ent_ids or t in @ent_ids"]
-    #     target2tri_idx = dict()
-    #     for i, (target, degree2ent_ids) in enumerate(target2degrees.items()):
-    #         degrees2tri_idx = dict()
-    #         x_slots = cut_tail_and_split(all_target2degree2trids[target], self.params.num_p)
-    #         for slot_degrees in x_slots:
-    #             slot_entids = [degree2ent_ids[d] for d in slot_degrees if d in degree2ent_ids]
-    #             ent_ids = list(chain.from_iterable(slot_entids))
-    #             slot_key = f"{slot_degrees[0]}-{slot_degrees[-1]}"
-    #             tri_group = tri_df.query(query_strs[i])
-    #             if len(tri_group.index) > 0:
-    #                 g_index = torch.from_numpy(tri_group.index.values)
-    #                 degrees2tri_idx.update({slot_key: g_index})
-    #             else:
-    #                 degrees2tri_idx.update({slot_key: []})
-    #         target2tri_idx.update({target: degrees2tri_idx})
-    #     return target2tri_idx
-
-    def get_partition_eval(self, target2tri_idx):
+    def get_partition_test_eval_per_model(self, target2tri_idx):
         target2m2degree_eval = dict()
         for target, partition2tri_idx in target2tri_idx.items():
             m2eval = dict()
             for m in self.params.models:
-                m_degree_group_eval = group_rank_eval(self.dataset,
-                                                      self.dataset.testing.mapped_triples,
+                m_preds = self.context_loader.load_preds([m], calibrated=False, cache=False)
+                m_degree_group_eval = group_rank_eval(self.dataset.testing.mapped_triples,
                                                       partition2tri_idx,
-                                                      self.context[m]['preds'])
+                                                      m_preds[m]['preds'],
+                    self.all_pos_triples)
                 m2eval.update({m: m_degree_group_eval})
             target2m2degree_eval.update({target: m2eval})
         return target2m2degree_eval
+
+    def get_partition_valid_eval_per_model(self, target2tri_idx):
+        target2m2degree_eval = dict()
+        for target, partition2tri_idx in target2tri_idx.items():
+            m2eval = dict()
+            for m in self.params.models:
+                m_valid_preds = self.context_loader.load_valid_preds([m], cache=False)
+                m_degree_group_eval = group_rank_eval(
+                                                      self.dataset.validation.mapped_triples,
+                                                      partition2tri_idx,
+                                                      m_valid_preds[m]['valid_preds'], self.all_pos_triples)
+                m2eval.update({m: m_degree_group_eval})
+            target2m2degree_eval.update({target: m2eval})
+        return target2m2degree_eval
+
+    def partition_eval_and_save(self, target2partition2tri_idx):
+        dir_name = self.params.work_dir + 'degree_eval/'
+        common_utils.init_dir(dir_name)
+        target2m2partition2eval = self.get_partition_valid_eval_per_model(target2partition2tri_idx)
+        for in_or_out in target2m2partition2eval:
+            m2partition2eval_scores = target2m2partition2eval[in_or_out]
+            for model_name in args.models:
+                partition2eval = m2partition2eval_scores[model_name]
+                head_tail_eval = [partition2eval[partition_key] for partition_key in partition2eval.keys()]
+                torch.save(torch.stack(head_tail_eval, 0), args.work_dir + f"{model_name}_{in_or_out.lower()}_degree_eval.pt")
+
+            partition2ent_idx = self.target2partition2entids[in_or_out]
+            entid2evalidx = dict()
+            for idx, (partition, entids) in enumerate(partition2ent_idx.items()):
+                entid2evalidx.update({int(entid): idx for entid in entids})
+            common_utils.save2json(entid2evalidx, dir_name + f"{in_or_out.lower()}_id2eval_idx.json")
 
     def _to_degree_distribution_charts(self, target2degrees2ids, y_lable='Triple'):
         for target, degree2ids in target2degrees2ids.items():
@@ -235,19 +238,17 @@ class EntDegreeChart(AnalysisChart):
             common_utils.save_to_file(table_simple, self.params.work_dir + f'figs/{target}_degree_eval.txt', mode='w')
             common_utils.save_to_file(table_latex, self.params.work_dir + f'figs/{target}_degree_eval.txt', mode='a')
 
-    def analyze(self):
+    def analyze_test(self):
         common_utils.init_dir(self.params.work_dir + 'figs/')
-        target2degrees2entids = find_degree_groups(self.dataset)
-        target2partition2entids = self.make_entity_partitions(target2degrees2entids)
-        self._to_degree_distribution_charts(target2partition2entids, "Entity")
+        self._to_degree_distribution_charts(self.target2partition2entids, "Entity")
         all_tris = torch.cat([self.dataset.testing.mapped_triples,
                               self.dataset.validation.mapped_triples,
                               self.dataset.training.mapped_triples], 0)
-        target2partition2trids = self.make_triple_partition_per_degree_partition(all_tris, target2partition2entids)
+        all_target2partition2trids = self.make_triple_partitions(all_tris)
         del all_tris
-        self._to_degree_distribution_charts(target2partition2trids, "Triple")
-        test_target2partition2tri = self.make_triple_partition_per_degree_partition(self.dataset.testing.mapped_triples, target2partition2entids)
-        target2m2degree_eval = self.get_partition_eval(test_target2partition2tri)
+        self._to_degree_distribution_charts(all_target2partition2trids, "Triple")
+        test_target2partition2tri = self.make_triple_partitions(self.dataset.testing.mapped_triples)
+        target2m2degree_eval = self.get_partition_test_eval_per_model(test_target2partition2tri)
         self._to_table(target2m2degree_eval)
         self._to_degree_eval_charts(target2m2degree_eval)
 
@@ -262,4 +263,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.models = args.models.split('_')
     anlz = EntDegreeChart(args)
-    anlz.analyze()
+    anlz.analyze_test()

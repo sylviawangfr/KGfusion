@@ -8,13 +8,14 @@ from features.FusionDataset import FusionDataset, get_multi_model_neg_topk
 class PerRelDataset(FusionDataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
-    def __init__(self, mapped_triples: MappedTriples, context_resource, all_pos_triples, num_neg=4):
-        super().__init__(mapped_triples, context_resource, all_pos_triples, num_neg)
-        self.dim = len(context_resource['models']) * 2
+    def __init__(self, mapped_triples: MappedTriples, context_loader, all_pos_triples, feature='rel',num_neg=4):
+        super().__init__(mapped_triples, context_loader, all_pos_triples, num_neg)
+        self.dim = len(context_loader.models) * 2
+        self.feature = feature
 
     def _get_rel_eval_scores(self, model_rel_eval, rel2idx):
         rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
-        rel_idx = rel_mapped.applymap(lambda x: rel2idx[x] if x in rel2idx else -1)
+        rel_idx = rel_mapped.applymap(lambda x: rel2idx[x])
         rel_h_eval = model_rel_eval[rel_idx.to_numpy(), 0, -1] # the model_rel_eval is in shape [group_num, 3, 4], hit@1,3,10, mrr
         rel_t_eval = model_rel_eval[rel_idx.to_numpy(), 1, -1] # the model_rel_eval is in shape [group_num, 3, 4], hit@1,3,10, mrr
         return rel_h_eval, rel_t_eval
@@ -28,15 +29,18 @@ class PerRelDataset(FusionDataset):
         tail_scores = []
         h_rel_eval = []
         t_rel_eval = []
-        rel2idx = self.context_resource['releval2idx']
-        num_models = len(self.context_resource['models'])
-        for m in self.context_resource['models']:
-            m_context = self.context_resource[m]
-            m_preds = m_context['preds']
-            m_h_preds, m_t_preds = torch.chunk(m_preds, 2, 1)
+
+        num_models = len(self.context_loader.models)
+        if self.feature == 'rel':
+            m_rel_eval = self.context_loader.load_rel_eval(self.context_loader.models, cache=False)
+        else:
+            m_rel_eval = self.context_loader.load_rel_mapping_eval(self.context_loader.models, cache=False)
+        for m in self.context_loader.models:
+            m_preds = self.context_loader.load_preds([m], calibrated=True)
+            m_h_preds, m_t_preds = torch.chunk(m_preds[m], 2, 1)
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))
             tail_scores.append(torch.flatten(m_t_preds, start_dim=0, end_dim=1))
-            m_h_eval, m_t_eval = self._get_rel_eval_scores(m_context['rel_eval'], rel2idx)
+            m_h_eval, m_t_eval = self._get_rel_eval_scores(m_rel_eval[m]['rel_eval'], m_rel_eval['rel2eval_idx'])
             h_rel_eval.append(m_h_eval)
             t_rel_eval.append(m_t_eval)
 

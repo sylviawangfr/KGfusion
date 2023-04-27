@@ -94,7 +94,7 @@ class LpKBC:
         # eval_groups(pykeen_dataset.testing.mapped_triples, test_scores)
         torch.save(test_scores, args.work_dir + "preds.pt")
         dev_scores = kbc_dataset.pred(model, 'valid', -1, filter=True)
-        torch.save(dev_scores, args.work_dir + "eval.pt")
+        torch.save(dev_scores, args.work_dir + "valid_preds.pt")
         all_pos_triples = get_all_pos_triples(pykeen_dataset)
         to_fusion_eval_format(pykeen_dataset, dev_scores,
                               all_pos_triples, args.work_dir, top_k=100)
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     )
     models = ['CP', 'ComplEx']
     parser.add_argument(
-        '--model', choices=models, default="CP",
+        '--model', choices=models, default="ComplEx",
         help="Model in {}".format(models)
     )
     regularizers = ['N3', 'F2']
@@ -163,7 +163,7 @@ if __name__ == '__main__':
         help="decay rate for second moment estimate in Adam"
     )
     parser.add_argument(
-        '--work_dir', type=str, default="../../outputs/UMLS/CP/"
+        '--work_dir', type=str, default="../../outputs/UMLS/ComplEx/"
     )
     m_args = parser.parse_args()
     lpkbc = LpKBC(m_args)

@@ -2,7 +2,7 @@ from abc import abstractmethod, ABC
 import pykeen
 from pykeen.datasets import get_dataset
 from pykeen.utils import prepare_filter_triples
-from context_load_and_run import load_score_context
+from context_load_and_run import ContextLoader
 from typing import Optional
 from pykeen.constants import TARGET_TO_INDEX
 from pykeen.evaluation.evaluator import filter_scores_
@@ -30,14 +30,23 @@ class AnalysisChart(ABC):
         self.dataset = get_dataset(
             dataset=params.dataset
         )
-        self.context = load_score_context(self.params.models,
-                                          in_dir=self.params.work_dir,
-                                          calibration=self.params.cali == 'True'
-                                          )
+        self.context_loader = ContextLoader(self.params.work_dir, self.params.models)
         self.all_pos_triples = get_all_pos_triples(self.dataset)
 
     @abstractmethod
-    def analyze(self):
+    def analyze_test(self):
+        pass
+
+    @abstractmethod
+    def get_partition_test_eval_per_model(self, target2tri_idx):
+        pass
+
+    @abstractmethod
+    def get_partition_valid_eval_per_model(self, target2tri_idx):
+        pass
+
+    @abstractmethod
+    def partition_eval_and_save(self, key2tri_ids):
         pass
 
 
@@ -157,7 +166,7 @@ def calc_hit_at_k(pred_scores, ground_truth_idx):
 
 
 def to_fusion_eval_format(dataset: pykeen.datasets.Dataset, eval_preds_in_pykeen, all_pos_triples, out_dir, top_k=10):
-    torch.save(eval_preds_in_pykeen, out_dir + "eval.pt")
+    torch.save(eval_preds_in_pykeen, out_dir + "valid_preds.pt")
     mapped_triples = dataset.validation.mapped_triples
     total_scores = eval_groups(mapped_triples, eval_preds_in_pykeen, all_pos_triples)
     torch.save(torch.as_tensor(total_scores), out_dir + "rank_total_eval.pt")
@@ -197,8 +206,6 @@ def get_neg_scores_top_k(mapped_triples, dev_predictions, all_pos_triples, top_k
     neg_scores = torch.stack(neg_scores, 1)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
     neg_index = torch.stack(neg_index, 1)
     return neg_scores, neg_index
-
-
 
 
 
