@@ -10,10 +10,12 @@ from features.FusionDataset import FusionDataset, get_multi_model_neg_topk
 class PerRelBothDataset(FusionDataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
-    def __init__(self, mapped_triples: MappedTriples, context_loader: ContextLoader, all_pos_triples, feature='rel', num_neg=4):
+    def __init__(self, mapped_triples: MappedTriples, context_loader: ContextLoader, all_pos_triples,
+                 feature='rel', num_neg=4, calibrated=False):
         super().__init__(mapped_triples, context_loader, all_pos_triples, num_neg)
         self.dim = len(context_loader.models) * 2
         self.feature = feature
+        self.calibrated = calibrated
 
     def _get_eval_scores(self, model_rel_eval, rel2idx):
         rel_mapped = pd.DataFrame(data=self.mapped_triples.numpy()[:, 1], columns=['r'])
@@ -67,7 +69,7 @@ class PerRelBothDataset(FusionDataset):
         else:
             m_rel_eval = self.context_loader.load_rel_mapping_eval(self.context_loader.models, cache=False)
         for m in self.context_loader.models:
-            m_context = self.context_loader.load_preds([m], calibrated=True)
+            m_context = self.context_loader.load_preds([m], calibrated=self.calibrated)
             m_preds = m_context[m]['preds']
             m_h_preds, m_t_preds = torch.chunk(m_preds, 2, 1)
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))

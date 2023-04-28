@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from mlflow import log_param
 import mlflow.pytorch
-from context_load_and_run import load_score_context
+from context_load_and_run import ContextLoader
 from lp_kge.lp_pykeen import get_all_pos_triples
 
 logging.basicConfig(level=logging.INFO)
@@ -152,10 +152,13 @@ def get_MLP(keyword='2'):
     return clz[keyword]
 
 
-def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
+def train_aggregation_model(mapped_triples: MappedTriples, context_loader, all_pos_triples, para):
     dataset_cls = get_features_clz(para.features)
-    train_data = dataset_cls(mapped_triples, context_resource, all_pos_triples,
-                                                  num_neg=para.num_neg)
+    train_data = dataset_cls(mapped_triples,
+                             context_loader,
+                             all_pos_triples,
+                             calibrated=False,
+                             num_neg=para.num_neg)
     train_dataloader = DataLoader(train_data, batch_size=para.batch_size, shuffle=True, collate_fn=train_data.collate_train)
     train_loop = get_train_loop(para.loss)
     num_epochs = para.epochs
@@ -183,7 +186,7 @@ def train_aggregation_model(mapped_triples: MappedTriples, context_resource, all
     return model
 
 
-def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource, all_pos_triples, para):
+def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_loader, all_pos_triples, para):
     # Send to device
     device: torch.device = resolve_device()
     logger.info(f"Eval Using device: {device}")
@@ -195,7 +198,10 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
     h_preds = []
     t_preds = []
     dataloader_cls = get_features_clz(para.features)
-    test_per_rel_dataset = dataloader_cls(mapped_triples, context_resource, all_pos_triples)
+    test_per_rel_dataset = dataloader_cls(mapped_triples,
+                                          context_loader,
+                                          all_pos_triples,
+                                          calibrated=True)
     test_dataloader = DataLoader(test_per_rel_dataset, batch_size=32, collate_fn=test_per_rel_dataset.collate_test)
     for i, batch in enumerate(test_dataloader):
         ens_logits = model(batch.to(device))
@@ -212,12 +218,7 @@ def _nn_aggregate_scores(model, mapped_triples: MappedTriples, context_resource,
 class NNLinearBlender(Blender):
     def __init__(self, params, logger):
         super().__init__(params, logger)
-        self.context = load_score_context(params.models,
-                                          in_dir=params.work_dir,
-                                          calibration=True,
-                                          evaluator_key='rank',
-                                          eval_feature=params.eval_feature,
-                                          )
+        self.context_loader = ContextLoader(in_dir=params.work_dir, model_list=params.models)
         self.params.dataset = self.dataset
 
     def aggregate_scores(self):
@@ -229,13 +230,11 @@ class NNLinearBlender(Blender):
             log_para = self.params.__dict__
             for k in log_para:
                 log_param(k, log_para[k])
-        # 1. load individual model context
-        context = self.context
         # 2. train model
         all_pos = get_all_pos_triples(self.dataset)
-        mo = train_aggregation_model(self.dataset.validation.mapped_triples, context, all_pos, self.params)
+        mo = train_aggregation_model(self.dataset.validation.mapped_triples, self.context_loader, all_pos, self.params)
         # 3. aggregate scores for testing
-        ht_scores = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, context, all_pos, self.params)
+        ht_scores = _nn_aggregate_scores(mo, self.dataset.testing.mapped_triples, self.context_loader, all_pos, self.params)
 
         option_str = f"{self.dataset.metadata['name']}_" \
                      f"{'_'.join(self.params.models)}_" \
@@ -252,7 +251,7 @@ if __name__ == '__main__':
     # 4: PerEntDataset,
     # 5: PerRelEntDataset
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="ComplEx_TuckER")
+    parser.add_argument('--models', type=str, default="ComplEx_CP_RotatE_TuckER_anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--features', type=int, default=3)
     parser.add_argument('--eval_feature', type=str, default='rel')
@@ -260,7 +259,7 @@ if __name__ == '__main__':
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--weight_decay", type=float, default=5e-4)
-    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--loss", type=str, default='margin')
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--num_neg", type=int, default=10)

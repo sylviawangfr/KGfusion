@@ -1,8 +1,5 @@
-import pandas as pd
-from pykeen.evaluation.evaluator import create_sparse_positive_filter_, filter_scores_
-from pykeen.typing import MappedTriples, COLUMN_HEAD, COLUMN_TAIL
+from pykeen.typing import MappedTriples
 import torch
-
 from context_load_and_run import ContextLoader
 from features.FusionDataset import FusionDataset, get_multi_model_neg_topk
 
@@ -10,9 +7,10 @@ from features.FusionDataset import FusionDataset, get_multi_model_neg_topk
 class PerModelBothDataset(FusionDataset):
     #   combine head and tail scores in one example:
     #   [m1_h_eval, m1_t_eval, ..., m1_h_score, m1_t_score, ... ]
-    def __init__(self, mapped_triples: MappedTriples, context_loader:ContextLoader, all_pos_triples, num_neg=4):
+    def __init__(self, mapped_triples: MappedTriples, context_loader:ContextLoader, all_pos_triples, num_neg=4, calibrated=True):
         super().__init__(mapped_triples, context_loader, all_pos_triples, num_neg)
         self.dim = len(context_loader.models) * 2
+        self.calibrated = calibrated
 
     def generate_training_input_feature(self):
         #   [m1_score, m2_score, ... ]
@@ -55,7 +53,7 @@ class PerModelBothDataset(FusionDataset):
         num_models = len(self.context_loader.models)
         m_eval = self.context_loader.load_total_eval(self.context_loader.models)
         for m in self.context_loader.models:
-            m_context = self.context_loader.load_preds([m], cache=False)
+            m_context = self.context_loader.load_preds([m], cache=False, calibrated=self.calibrated)
             m_preds = m_context[m]['preds']
             m_h_preds, m_t_preds = torch.chunk(m_preds, 2, 1)
             head_scores.append(torch.flatten(m_h_preds, start_dim=0, end_dim=1))

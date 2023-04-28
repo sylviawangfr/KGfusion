@@ -74,6 +74,7 @@ class BinaryClassifier(Blender):
             dev_feature_dataset = ScoresOnlyDataset(self.dataset.validation.mapped_triples,
                                                     self.context_loader,
                                                     all_pos_triples,
+                                                    calibrated=False,
                                                     num_neg=self.params.num_neg)
             pos, neg = dev_feature_dataset.get_all_dev_examples()
             pred_features = test_data_feature.get_all_test_examples()

@@ -1,11 +1,8 @@
 import argparse
-import numpy as np
 import pandas as pd
 import torch
-from tabulate import tabulate
 import common_utils
 from analysis.group_eval_utils import group_rank_eval, AnalysisChart, find_relation_mappings
-import matplotlib.pyplot as plt
 
 
 class RelChart(AnalysisChart):

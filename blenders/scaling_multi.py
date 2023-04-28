@@ -2,19 +2,15 @@ import argparse
 import gc
 import logging
 import sys
-
 import torch
 from netcal.binning import IsotonicRegression
 from netcal.scaling import LogisticCalibration
 from pykeen.datasets import get_dataset
-from pykeen.evaluation import RankBasedEvaluator
-from pykeen.typing import LABEL_HEAD, LABEL_TAIL
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
-from blenders.blender_utils import evaluate_target
-from common_utils import format_result
-from context_load_and_run import load_score_context
+from blenders.blender_utils import evaluate_testing_scores
+from context_load_and_run import ContextLoader
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 
@@ -32,36 +28,31 @@ class PlattScalingIndividual():
         self.model_list = params.models
         self.num_neg = params.num_neg
         self.params = params
-        self.context = load_score_context(params.models,
-                                          in_dir=params.work_dir,
-                                          calibration=False
-                                          )
+        self.context_loader = ContextLoader(in_dir=params.work_dir,
+                                      model_list=params.models)
 
     def cali(self):
         print(self.params.__dict__)
         all_pos_triples = get_all_pos_triples(self.dataset)
-        models_context = self.context
         dev_feature_dataset = ScoresOnlyDataset(self.dataset.validation.mapped_triples,
-                                                models_context,
+                                                self.context_loader,
                                                 all_pos_triples,
                                                 num_neg=self.num_neg)
-        test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples, models_context, all_pos_triples)
+
+        test_feature_dataset = ScoresOnlyDataset(self.dataset.testing.mapped_triples,
+                                                 self.context_loader.set_cache_preds(True),
+                                                 all_pos_triples,
+                                                 calibrated=False)
         # detection : bool, default: False
         #     If True, the input array 'X' is treated as a box predictions with several box features (at least
         # box confidence must be present) with shape (n_samples, [n_box_features]).
         pos, neg = dev_feature_dataset.get_all_dev_examples()
-        # keep_index1 = (pos > 0).nonzero(as_tuple=True)[0]
-        # neg = neg.reshape(pos.shape[0], self.num_neg, pos.shape[-1])[keep_index1].flatten().unsqueeze(1)
-        # pos = pos[keep_index1]
-        # keep_index2 = (neg > 0).nonzero(as_tuple=True)[0]
-        # neg = neg[keep_index2]
-
-        remove_index1 = (pos == 0).nonzero(as_tuple=True)[0]
+        remove_index1 = (pos <= 0).nonzero(as_tuple=True)[0].unique()
         keep_index1 = np.delete(np.arange(pos.shape[0]), remove_index1.numpy(), 0)
-        neg = neg.reshape(pos.shape[0], int(neg.shape[0]/pos.shape[0]), neg.shape[-1])[keep_index1]
-        neg = neg.reshape(neg.shape[0] * neg.shape[1], neg.shape[-1])
+        neg = neg.reshape(pos.shape[0], self.num_neg, pos.shape[-1])[keep_index1]
         pos = pos[keep_index1]
-        remove_index2 = (neg == 0).nonzero(as_tuple=True)[0]
+        neg = neg.reshape(neg.shape[0] * neg.shape[1], neg.shape[-1])
+        remove_index2 = (neg <= 0).nonzero(as_tuple=True)[0].unique()
         keep_index2 = np.delete(np.arange(neg.shape[0]), remove_index2.numpy(), 0)
         neg = neg[keep_index2]
 
@@ -104,7 +95,7 @@ class PlattScalingIndividual():
             if use_cuda:
                 torch.cuda.empty_cache()
             cali.fit(m.numpy(), labels)
-            old_shape = self.context[model_name]['preds'].shape
+            old_shape = self.context_loader.context_resource[model_name]['preds'].shape
             logger.info(f"Start transforming {self.model_list[index]}.")
             m_test_dataloader = DataLoader(pred_features[index].numpy(), batch_size=512 * old_shape[1])
             individual_cali = []
@@ -122,11 +113,11 @@ class PlattScalingIndividual():
             h_preds = torch.reshape(h_preds, (old_shape[0], int(old_shape[1] / 2)))
             t_preds = torch.reshape(t_preds, (old_shape[0], int(old_shape[1] / 2)))
             individual_cali = torch.cat([h_preds, t_preds], 1)
-            torch.save(individual_cali, self.work_dir + f"{model_name}/cali_preds2.pt")
+            torch.save(individual_cali, self.work_dir + f"{model_name}/cali_preds.pt")
             logger.info(f"Transforming saved for {self.model_list[index]}.")
-            raw_res = self.test_pred(self.context[model_name]['preds'])
+            raw_res = evaluate_testing_scores(self.dataset, self.context_loader.context_resource[model_name]['preds'])
             logger.info(f"{self.model_list[index]} rank evaluation with raw scores:\n {raw_res}")
-            cali_res = self.test_pred(individual_cali)
+            cali_res = evaluate_testing_scores(self.dataset, individual_cali)
             logger.info(f"{self.model_list[index]} rank evaluation with calibrated scores:\n {cali_res}")
             del cali
             del h_preds
@@ -136,28 +127,11 @@ class PlattScalingIndividual():
             if use_cuda:
                 torch.cuda.empty_cache()
 
-    def test_pred(self, pred_scores_ht):
-        all_pos = get_all_pos_triples(self.dataset)
-        ht_scores = torch.chunk(pred_scores_ht, 2, 1)
-        evaluator = RankBasedEvaluator()
-        relation_filter = None
-        for ind, target in enumerate([LABEL_HEAD, LABEL_TAIL]):
-            relation_filter = evaluate_target(
-                batch=self.dataset.testing.mapped_triples,
-                scores=ht_scores[ind],
-                target=target,
-                evaluator=evaluator,
-                all_pos_triples=all_pos,
-                relation_filter=relation_filter,
-            )
-        result = evaluator.finalize()
-        str_re = format_result(result)
-        return str_re
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="RotatE_CPComplEx_TuckER_CP")
+    parser.add_argument('--models', type=str, default="CP_ComplEx_RotatE_TuckER_anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument("--num_neg", type=int, default=10)
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")

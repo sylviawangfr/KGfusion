@@ -83,7 +83,7 @@ def group_rank_eval(mapped_triples, group_idx_dict, scores_in_pykeen_format, all
     head_tail_eval = {}
     for key, g_index in group_idx_dict.items():
         if len(g_index) == 0:
-            head_tail_eval.update({key: torch.zeros((4, 3))})
+            head_tail_eval.update({key: torch.zeros((3, 4))})
         else:
             g_triples = mapped_triples[g_index]
             g_heads = g_triples[:, 0]

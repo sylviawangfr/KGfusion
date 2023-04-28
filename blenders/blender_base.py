@@ -9,7 +9,6 @@ from blenders.blender_utils import evaluate_testing_scores
 from features.feature_per_ent_dataset import PerEntDegreeDataset
 from features.feature_per_model_both_dataset import PerModelBothDataset
 from features.feature_per_rel_both_dataset import PerRelBothDataset
-from features.feature_per_rel_ent_dataset import PerRelEntDataset
 from features.feature_per_rel_ht_dataset import PerRelDataset
 from features.feature_scores_only_dataset import ScoresOnlyDataset
 
@@ -54,6 +53,5 @@ def get_features_clz(keyword=2):
         2: PerRelBothDataset,
         3: ScoresOnlyDataset,
         4: PerEntDegreeDataset,
-        5: PerRelEntDataset,
         6: PerModelBothDataset}
     return clz[keyword]

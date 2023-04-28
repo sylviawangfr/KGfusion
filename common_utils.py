@@ -81,9 +81,14 @@ def does_exist(file_path):
     return os.path.exists(file_path)
 
 
-def load_json(in_file):
+def jsonkeys2int(x):
+    if isinstance (x, dict):
+        return {int(k): v for k, v in x.items()}
+
+
+def load_json(in_file, object_hook):
     with open(in_file, "r") as f:
-        dict_data = json.load(f)
+        dict_data = json.load(f, object_hook=object_hook)
         f.close()
     return dict_data
 

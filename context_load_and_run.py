@@ -54,7 +54,8 @@ class ContextLoader:
             file_name = self.in_dir + f'rel_eval/{m}_rel_eval.pt'
             rel_eval = torch.load(file_name)
             tmp_m2eval[m].update({'rel_eval': rel_eval})
-        rel2eval_idx = common_utils.load_json(self.in_dir + f"rel_eval/rel2eval_idx.json")
+        rel2eval_idx = common_utils.load_json(self.in_dir + f"rel_eval/rel2eval_idx.json",
+                                              object_hook=common_utils.jsonkeys2int)
         tmp_m2eval['rel2eval_idx'] = rel2eval_idx
         return tmp_m2eval
 
@@ -64,7 +65,8 @@ class ContextLoader:
             file_name = self.in_dir + f'rel_mapping_eval/{m}_rel_mapping_eval.pt'
             rel_eval = torch.load(file_name)
             tmp_m2eval[m].update({'rel_eval': rel_eval})
-        rel2eval_idx = common_utils.load_json(self.in_dir + f"rel_mapping_eval/rel2eval_idx.json")
+        rel2eval_idx = common_utils.load_json(self.in_dir + f"rel_mapping_eval/rel2eval_idx.json",
+                                              object_hook=common_utils.jsonkeys2int)
         tmp_m2eval['rel2eval_idx'] = rel2eval_idx
         return tmp_m2eval
 
@@ -77,7 +79,8 @@ class ContextLoader:
                 t_degree_eval = torch.load(file_name)
                 tmp_m2eval[m].update({f'{t}_degree_eval': t_degree_eval})
         for t in targets:
-            ent2eval_idx = common_utils.load_json(self.in_dir + f"degree_eval/{t}_id2eval_idx.json")
+            ent2eval_idx = common_utils.load_json(self.in_dir + f"degree_eval/{t}_id2eval_idx.json",
+                                                  object_hook=common_utils.jsonkeys2int)
             tmp_m2eval[f'{t}_id2eval_idx'] = ent2eval_idx
         return tmp_m2eval
 
