@@ -76,7 +76,7 @@ class PlattScalingIndividual():
                 cali = LogisticCalibration(method='momentum',
                                            detection=True,
                                            independent_probabilities=True,
-                                           momentum_epochs=500,
+                                           momentum_epochs=self.params.epoch,
                                            use_cuda=use_cuda,
                                            vi_epochs=self.params.epoch)
             else:
