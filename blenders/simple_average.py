@@ -34,5 +34,5 @@ if __name__ == '__main__':
     parser.add_argument('--calibrated', type=str, default="True")
     args = parser.parse_args()
     args.models = args.models.split('_')
-    wab = SimpleAverageBlender(args, logging.getLogger(__name__))
+    wab = SimpleAverageBlender(args, logging.getLogger('SimpleAverageBlender'))
     wab.aggregate_scores()

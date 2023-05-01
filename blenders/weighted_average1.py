@@ -62,5 +62,5 @@ if __name__ == '__main__':
     parser.add_argument('--features', type=int, default=4)  # 1, 2, 4, 6
     args = parser.parse_args()
     args.models = args.models.split('_')
-    wab = WeightedAverageBlender1(args, logging.getLogger(__name__))
+    wab = WeightedAverageBlender1(args, logging.getLogger('WeightedAverageBlender1'))
     wab.aggregate_scores()

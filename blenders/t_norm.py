@@ -33,5 +33,5 @@ if __name__ == '__main__':
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     args.models = args.models.split('_')
-    wab = TNormBlender(args, logging.getLogger(__name__))
+    wab = TNormBlender(args, logging.getLogger('TNormBlender'))
     wab.aggregate_scores()

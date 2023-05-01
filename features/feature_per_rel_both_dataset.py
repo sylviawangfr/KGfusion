@@ -44,7 +44,7 @@ class PerRelBothDataset(FusionDataset):
             scores_neg.append(m_neg_scores)  # [h1* candi,h2 * candi...,t1 * candi, t2* candi...]
             neg_index_topk_times.append(m_neg_index_topk4)
             # model eval
-            m_b_eval = self._get_eval_scores(m_rel_eval[m]['rel_eval'], m_rel_eval[m]['rel2eval_idx'])
+            m_b_eval = self._get_eval_scores(m_rel_eval[m]['rel_eval'], m_rel_eval['rel2eval_idx'])
             both_eval.append(m_b_eval)
         # # pos feature [m1_eval, m2_eva., ... m1_s1,m2_s1,....]
         scores_pos = torch.vstack(scores_pos).T
