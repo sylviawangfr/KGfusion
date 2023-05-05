@@ -1,6 +1,8 @@
 import argparse
 import pandas as pd
 import torch
+from tabulate import tabulate
+
 import common_utils
 from analysis.group_eval_utils import group_rank_eval, AnalysisChart
 
@@ -34,7 +36,7 @@ class RelChart(AnalysisChart):
     def get_partition_test_eval_per_model(self, r2tri_ids):
         m_dict = dict()
         for m in self.params.models:
-            m_context = self.context_loader.load_preds([m], cache=False)
+            m_context = self.context_loader.load_preds([m], calibrated=True)
             key2eval = group_rank_eval(self.dataset.testing.mapped_triples,
                                        r2tri_ids,
                                        m_context[m]['preds'],
@@ -58,12 +60,38 @@ class RelChart(AnalysisChart):
         rel2evalidx = {int(rel): idx for idx, rel in enumerate(all_relids)}
         common_utils.save2json(rel2evalidx, dir_name + f"rel2eval_idx.json")
 
+    def _to_table(self, m2rel2eval, key2tri_ids):
+        rel2count = {k: key2tri_ids[k].shape[0] for k in key2tri_ids}
+        rel2count = dict(sorted(rel2count.items(), key=lambda item: item[1], reverse=True))
+        header = ['', 'Num_tri']
+        for m in self.params.models:
+            header.append(m)
+        col_num = 2 + len(self.params.models)
+        row_num = len(rel2count.keys())
+        data = [[0 for j in range(col_num)] for i in range(row_num)]
+        relid2name = {v: k for k, v in self.dataset.relation_to_id.items()}
+        for i, rel in enumerate(rel2count.keys()):
+            data[i][0] = relid2name[rel]
+            data[i][1] = rel2count[rel]
+        for j, m in enumerate(self.params.models):
+            rel2eval = m2rel2eval[m]
+            for i, rel in enumerate(rel2count.keys()):
+                data[i][j + 2] = rel2eval[rel][2, -1].item()
+
+        table_simple = tabulate(data, header, tablefmt="simple_grid", numalign="center", floatfmt=".3f")
+        table_latex = tabulate(data, header, tablefmt="latex", numalign="center", floatfmt=".3f")
+        print(table_simple)
+        common_utils.save_to_file(table_simple, self.params.work_dir + f'figs/rel_eval.txt', mode='w')
+        common_utils.save_to_file(table_latex, self.params.work_dir + f'figs/rel_eval.txt', mode='a')
+
     def analyze_test(self):
-        pass
+        key2tri_ids = self.make_triple_partitions(self.dataset.testing.mapped_triples)
+        m2rel2eval = self.get_partition_test_eval_per_model(key2tri_ids)
+        self._to_table(m2rel2eval, key2tri_ids)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CP_CPComplEx_TuckER_RotatE_anyburl")
+    parser.add_argument('--models', type=str, default="CP_ComplEx_TuckER_RotatE_anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="True")
