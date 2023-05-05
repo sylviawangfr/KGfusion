@@ -41,7 +41,7 @@ class RelMappingChart(AnalysisChart):
     def get_partition_test_eval_per_model(self, key2tri_ids):
         m_dict = dict()
         for m in self.params.models:
-            m_context = self.context_loader.load_preds([m], cache=False)
+            m_context = self.context_loader.load_preds([m], calibrated=True)
             key2eval = group_rank_eval(
                 self.dataset.testing.mapped_triples,
                 key2tri_ids,

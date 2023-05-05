@@ -2,7 +2,7 @@ import argparse
 import pandas as pd
 import torch
 import common_utils
-from analysis.group_eval_utils import group_rank_eval, AnalysisChart, find_relation_mappings
+from analysis.group_eval_utils import group_rank_eval, AnalysisChart
 
 
 class RelChart(AnalysisChart):
