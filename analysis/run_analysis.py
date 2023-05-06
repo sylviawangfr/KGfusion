@@ -1,5 +1,6 @@
 import argparse
 from analysis.ent_degree_chart import EntDegreeChart
+from analysis.rel_chart import RelChart
 from analysis.rel_mapping_chart import RelMappingChart
 
 
@@ -12,7 +13,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_p', type=int, default=10)
     args = parser.parse_args()
     args.models = args.models.split('_')
-    jobs = [EntDegreeChart, RelMappingChart]
+    jobs = [EntDegreeChart, RelMappingChart, RelChart]
     # jobs = [RelMappingChart]
     for j in jobs:
         tmp_job = j(args)

@@ -60,23 +60,26 @@ class RelChart(AnalysisChart):
         rel2evalidx = {int(rel): idx for idx, rel in enumerate(all_relids)}
         common_utils.save2json(rel2evalidx, dir_name + f"rel2eval_idx.json")
 
-    def _to_table(self, m2rel2eval, key2tri_ids):
+    def _to_table(self, m2rel2eval, key2tri_ids, all_key2tri_ids):
         rel2count = {k: key2tri_ids[k].shape[0] for k in key2tri_ids}
+        rel2count_all = {k: all_key2tri_ids[k].shape[0] for k in all_key2tri_ids}
         rel2count = dict(sorted(rel2count.items(), key=lambda item: item[1], reverse=True))
-        header = ['', 'Num_tri']
+        rel2count_all = dict(sorted(rel2count_all.items(), key=lambda item: item[1], reverse=True))
+        header = ['', 'num_train', 'num_test']
         for m in self.params.models:
             header.append(m)
-        col_num = 2 + len(self.params.models)
+        col_num = 3 + len(self.params.models)
         row_num = len(rel2count.keys())
         data = [[0 for j in range(col_num)] for i in range(row_num)]
         relid2name = {v: k for k, v in self.dataset.relation_to_id.items()}
         for i, rel in enumerate(rel2count.keys()):
             data[i][0] = relid2name[rel]
-            data[i][1] = rel2count[rel]
+            data[i][1] = rel2count_all[rel]
+            data[i][2] = rel2count[rel]
         for j, m in enumerate(self.params.models):
             rel2eval = m2rel2eval[m]
             for i, rel in enumerate(rel2count.keys()):
-                data[i][j + 2] = rel2eval[rel][2, -1].item()
+                data[i][j + 3] = rel2eval[rel][2, -1].item()
 
         table_simple = tabulate(data, header, tablefmt="simple_grid", numalign="center", floatfmt=".3f")
         table_latex = tabulate(data, header, tablefmt="latex", numalign="center", floatfmt=".3f")
@@ -85,9 +88,14 @@ class RelChart(AnalysisChart):
         common_utils.save_to_file(table_latex, self.params.work_dir + f'figs/rel_eval.txt', mode='a')
 
     def analyze_test(self):
+        all_tris = torch.cat([self.dataset.testing.mapped_triples,
+                              self.dataset.validation.mapped_triples,
+                              self.dataset.training.mapped_triples], 0)
+        all_key2tri_ids = self.make_triple_partitions(all_tris)
+        del all_tris
         key2tri_ids = self.make_triple_partitions(self.dataset.testing.mapped_triples)
         m2rel2eval = self.get_partition_test_eval_per_model(key2tri_ids)
-        self._to_table(m2rel2eval, key2tri_ids)
+        self._to_table(m2rel2eval, key2tri_ids, all_key2tri_ids)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
