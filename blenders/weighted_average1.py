@@ -59,7 +59,7 @@ if __name__ == '__main__':
     # "4": PerEntDegreeDataset,
     # "5": PerRelEntDataset
     # "6": PerModelBothDataset
-    parser.add_argument('--features', type=int, default=4)  # 1, 2, 4, 6
+    parser.add_argument('--features', type=int, default=1)  # 1, 2, 4, 6
     args = parser.parse_args()
     args.models = args.models.split('_')
     wab = WeightedAverageBlender1(args, logging.getLogger('WeightedAverageBlender1'))

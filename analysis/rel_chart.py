@@ -97,6 +97,7 @@ class RelChart(AnalysisChart):
         m2rel2eval = self.get_partition_test_eval_per_model(key2tri_ids)
         self._to_table(m2rel2eval, key2tri_ids, all_key2tri_ids)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
     parser.add_argument('--models', type=str, default="CP_ComplEx_TuckER_RotatE_anyburl")

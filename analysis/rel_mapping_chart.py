@@ -136,11 +136,16 @@ class RelMappingChart(AnalysisChart):
         all_key2tri_ids = self.make_triple_partitions(all_tris)
         del all_tris
         self._to_pie_chart(all_key2tri_ids, "Dataset")
-        key2tri_ids = self.make_triple_partitions(self.dataset.testing.mapped_triples)
-        self._to_pie_chart(key2tri_ids, "Testset")
-        m2eval = self.get_partition_test_eval_per_model(key2tri_ids)
-        self._to_bar_chart(m2eval, "rel_mapping_test_mrr.png")
-        self._to_table(m2eval)
+        key2tri_ids_test = self.make_triple_partitions(self.dataset.testing.mapped_triples)
+        self._to_pie_chart(key2tri_ids_test, "Testset")
+        m2eval_test = self.get_partition_test_eval_per_model(key2tri_ids_test)
+        self._to_bar_chart(m2eval_test, "rel_mapping_test_mrr.png")
+        self._to_table(m2eval_test)
+        key2tri_ids_valid = self.make_triple_partitions(self.dataset.validation.mapped_triples)
+        self._to_pie_chart(key2tri_ids_valid, "Valid_set")
+        m2eval_valid = self.get_partition_valid_eval_per_model(key2tri_ids_valid)
+        self._to_bar_chart(m2eval_valid, "rel_mapping_valid_mrr.png")
+        self._to_table(m2eval_valid)
 
 
 if __name__ == '__main__':
