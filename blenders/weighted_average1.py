@@ -44,6 +44,7 @@ class WeightedAverageBlender1(Blender):
 
         option_str = f"{self.params.dataset}_{'_'.join(self.params.models)}_" \
                      f"data{self.params.features}" \
+                     f"_{self.params.eval_feature}" \
                      f"_wavg"
         self.finalize(blender_scores, option_str)
 
