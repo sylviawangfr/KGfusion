@@ -58,7 +58,7 @@ if __name__ == '__main__':
     # "1": PerRelDataset,
     # "2": PerRelBothDataset,
     # "4": PerEntDegreeDataset,
-    # "5": PerRelEntDataset
+    # "5": PerRelBestDataset
     # "6": PerModelBothDataset
     parser.add_argument('--features', type=int, default=1)  # 1, 2, 4, 6
     args = parser.parse_args()
