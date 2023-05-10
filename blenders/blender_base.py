@@ -40,9 +40,9 @@ class Blender(ABC):
         ht_scores = torch.cat([h_preds, t_preds], 1)
         save_dir = self.params.work_dir + '_'.join(self.params.models) + '/'
         common_utils.init_dir(save_dir)
-        file_name = save_dir + f"{log_prefix}.pt"
-        torch.save(ht_scores, file_name)
-        self.logger.info(f"Transforming saved at {file_name}")
+        # file_name = save_dir + f"{log_prefix}.pt"
+        # torch.save(ht_scores, file_name)
+        # self.logger.info(f"Transforming saved at {file_name}")
         str_re = evaluate_testing_scores(self.dataset, ht_scores)
         common_utils.save_to_file(str_re, self.log_dir + log_prefix + '.log')
         self.logger.info(f"{log_prefix}:\n{str_re}")

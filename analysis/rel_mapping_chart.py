@@ -150,7 +150,7 @@ class RelMappingChart(AnalysisChart):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="experiment settings")
-    parser.add_argument('--models', type=str, default="CP_CPComplEx_TuckER_RotatE_anyburl")
+    parser.add_argument('--models', type=str, default="CP_ComplEx_TuckER_RotatE_anyburl")
     parser.add_argument('--dataset', type=str, default="UMLS")
     parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     parser.add_argument('--cali', type=str, default="True")
