@@ -9,14 +9,14 @@ from features.feature_scores_only_dataset import ScoresOnlyDataset
 from lp_kge.lp_pykeen import get_all_pos_triples
 from blenders.blender_base import Blender, get_features_clz
 
-if torch.cuda.is_available():
-    import cuml as sk
-    from cuml.svm import SVC
-    from cuml.neural_network import MLPClassifier
-else:
-    import sklearn as sk
-    from sklearn.svm import SVC
-    from sklearn.neural_network import MLPClassifier
+# if torch.cuda.is_available():
+#     import cuml as sk
+#     from cuml.svm import SVC
+#     from cuml.neural_network import MLPClassifier
+# else:
+import sklearn as sk
+from sklearn.svm import SVC
+from sklearn.neural_network import MLPClassifier
 
 
 names = [
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_feature', type=str, default='rel')
     # "2": PerRelBothDataset,
     # "3": ScoresOnlyDataset,
-    parser.add_argument('--features', type=int, default=2)  # 1, 2, 4, 6
+    parser.add_argument('--features', type=int, default=3)  # 1, 2, 4, 6
     args = parser.parse_args()
     args.models = args.models.split('_')
     wab = BinaryClassifier(args, logging.getLogger(__name__))
