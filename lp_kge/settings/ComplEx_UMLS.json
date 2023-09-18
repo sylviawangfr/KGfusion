@@ -27,9 +27,9 @@
       "reduction": "mean"
     },
     "training_loop": "SLCWA",
-    "negative_sampler": "basic",
+    "negative_sampler": "bernoulli",
     "negative_sampler_kwargs": {
-      "num_negs_per_pos": 10
+      "num_negs_per_pos": 1
     },
     "training_kwargs": {
       "num_epochs": 100,

@@ -66,7 +66,7 @@ if __name__ == '__main__':
     # parser.add_argument('--models', type=str, default="NodePiece")
     parser.add_argument('--models', type=str, default="ComplEx")
     parser.add_argument('--dataset', type=str, default="UMLS")
-    parser.add_argument('--work_dir', type=str, default="../outputs/wn18rr/")
+    parser.add_argument('--work_dir', type=str, default="../outputs/umls/")
     args = parser.parse_args()
     param1 = args.__dict__
     param1.update({"models": args.models.split('_')})
