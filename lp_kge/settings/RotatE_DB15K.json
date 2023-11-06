@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "title": "RotatE for DB15K",
+    "comments": "same parameters as FB15K237"
+  },
+  "pipeline": {
+    "training":"../resources/DB15K/train.tsv",
+    "testing":"../resources/DB15K/test.tsv",
+    "validation":"../resources/DB15K/dev.tsv",
+    "model": "RotatE",
+    "model_kwargs": {
+      "embedding_dim": 1000,
+      "entity_initializer": "uniform",
+      "relation_initializer": "init_phases",
+      "relation_constrainer": "complex_normalize"
+    },
+    "optimizer": "Adam",
+    "optimizer_kwargs": {
+      "lr": 0.00005
+    },
+    "loss": "nssa",
+    "loss_kwargs": {
+      "reduction": "mean",
+      "adversarial_temperature": 1.0,
+      "margin": 9
+    },
+    "training_loop": "SLCWA",
+    "negative_sampler": "basic",
+    "negative_sampler_kwargs": {
+      "num_negs_per_pos": 64
+    },
+    "training_kwargs": {
+      "num_epochs": 1000,
+      "batch_size": 1024
+    },
+    "evaluator_kwargs": {
+      "filtered": true
+    }
+  }
+}
